@@ -15,15 +15,17 @@ async function deliverDue() {
     record.state = "sending"; // Claim before awaiting: overlapping ticks cannot duplicate delivery.
     try {
       const keys = vapidKeys();
-      await webpush.sendNotification(subscription, JSON.stringify({id: record.event.id, title: "Opportunity reminder", body: `${record.event.title} — deadline reminder`}), {TTL: 120, timeout: 15_000, vapidDetails: {subject: "mailto:demo@deadline.local", ...keys}});
+      console.info("PUSH_SEND_START", record.event.id, new URL(subscription.endpoint).hostname);
+      const response = await webpush.sendNotification(subscription, JSON.stringify({id: record.event.id, title: "Opportunity reminder", body: `${record.event.title} — deadline reminder`}), {TTL: 120, timeout: 15_000, vapidDetails: {subject: "mailto:demo@deadline.local", ...keys}});
       record.state = "sent";
-      console.info("Reminder accepted by push service:", record.event.id);
+      console.info("PUSH_SEND_SUCCESS", record.event.id, response.statusCode);
     } catch (error) {
       const status = (error as {statusCode?: number}).statusCode;
       if (status === 404 || status === 410) store.subscriptions.delete(record.endpoint);
       // No automatic retry after ambiguous network errors: avoid duplicate notifications.
       record.state = "failed";
-      console.error("Reminder delivery failed:", record.event.id, status ?? "network/configuration");
+      const body = String((error as {body?: string}).body ?? "").replace(/https?:\/\/\S+/g, "[url]").replace(/[A-Za-z0-9_+/=-]{24,}/g, "[redacted]").slice(0, 300);
+      console.error("PUSH_SEND_ERROR", record.event.id, status ?? "network/configuration", body);
     }
   }
 }
