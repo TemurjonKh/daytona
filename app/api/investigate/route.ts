@@ -11,7 +11,7 @@ export async function POST(request:Request) {
   const stream=new ReadableStream({
     start(controller){
       const emit:Emit=(event,data)=>{if(disconnected)return;try{controller.enqueue(new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));}catch{disconnected=true;}};
-      void investigate(url,emit).catch(error=>{const allowed=['Invalid URL','Page fetch failed','Daytona API key is not configured','Daytona sandbox creation failed','Browser rendering failed','Browser tooling unavailable','Could not extract useful page content','Sandbox cleanup failed; check Daytona dashboard'];const message=error instanceof Error&&allowed.includes(error.message)?error.message:'Investigation failed';console.error('Investigation failed:',message);emit('error',{message});emit('done',{ok:false});}).finally(()=>{if(!disconnected)controller.close();});
+      void investigate(url,emit,typeof (input as {goal?:unknown}).goal==='string'?(input as {goal:string}).goal.slice(0,1000):undefined).catch(error=>{const allowed=['Invalid URL','Page fetch failed','Daytona API key is not configured','Daytona sandbox creation failed','Browser rendering failed','Browser tooling unavailable','Could not extract useful page content','Sandbox cleanup failed; check Daytona dashboard'];const message=error instanceof Error&&allowed.includes(error.message)?error.message:'Investigation failed';console.error('Investigation failed:',message);emit('error',{message});emit('done',{ok:false});}).finally(()=>{if(!disconnected)controller.close();});
     },
     cancel(){disconnected=true;} // Work continues to finally, even when the caller closes the tab.
   });

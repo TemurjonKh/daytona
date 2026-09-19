@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
-export default function InputCard({onInvestigate,busy=false}: {onInvestigate: (url:string) => void;busy?:boolean}) {
+export default function InputCard({onInvestigate,busy=false}: {onInvestigate: (url:string,goal?:string) => void;busy?:boolean}) {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -13,7 +13,7 @@ export default function InputCard({onInvestigate,busy=false}: {onInvestigate: (u
   }
   return <section className="card p-5 sm:p-7" aria-labelledby="input-title">
     <div className="mb-5 flex items-center gap-3"><span className="step-number">01</span><h2 id="input-title" className="font-semibold">Start with a source</h2></div>
-    <form onSubmit={e => {e.preventDefault(); const form=new FormData(e.currentTarget);onInvestigate(String(form.get("url")??""));}} className="space-y-4">
+    <form onSubmit={e => {e.preventDefault(); const form=new FormData(e.currentTarget);onInvestigate(String(form.get("url")??""),String(form.get("goal")??""));}} className="space-y-4">
       <div><label htmlFor="source-url" className="field-label">Opportunity link</label><input id="source-url" name="url" required type="url" placeholder="https://example.com/your-next-opportunity" className="input" /></div>
       <div className="flex items-center gap-3 text-xs text-slate-400"><span className="h-px flex-1 bg-slate-100"/>or upload a poster<span className="h-px flex-1 bg-slate-100"/></div>
       <button type="button" onClick={() => picker.current?.click()} onDragOver={e => {e.preventDefault(); setDragging(true);}} onDragLeave={() => setDragging(false)} onDrop={e => {e.preventDefault(); setDragging(false); acceptFile(e.dataTransfer.files[0]);}} className={`w-full rounded-2xl border border-dashed px-4 py-5 text-center ${dragging ? "border-purple-500 bg-purple-50" : "border-slate-300 bg-slate-50/60"}`}>
@@ -21,9 +21,9 @@ export default function InputCard({onInvestigate,busy=false}: {onInvestigate: (u
       </button>
       <input ref={picker} type="file" accept="image/*" className="hidden" aria-label="Choose poster" onChange={e => acceptFile(e.target.files?.[0])}/>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      <div><label htmlFor="goal" className="field-label">Your goal <span className="font-normal text-slate-400">(optional)</span></label><input id="goal" className="input" placeholder="What do I need to apply?" /></div>
+      <div><label htmlFor="goal" className="field-label">Your goal <span className="font-normal text-slate-400">(optional)</span></label><input id="goal" name="goal" className="input" placeholder="What do I need to apply?" /></div>
       <button disabled={busy} className="primary w-full disabled:opacity-50" type="submit">{busy?"Investigating…":"Investigate"} <span aria-hidden="true">â†—</span></button>
-      <p className="text-center text-xs text-slate-500">URL investigation is live. Poster upload and goal extraction come next.</p>
+      <p className="text-center text-xs text-slate-500">URL investigation and grounded extraction are live. Poster analysis comes next.</p>
     </form>
   </section>;
 }
