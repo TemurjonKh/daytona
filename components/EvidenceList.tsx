@@ -1,4 +1,15 @@
 import type { OpportunityResult } from "@/lib/schema";
-export default function EvidenceList({result,live=false}: {result: OpportunityResult;live?:boolean}) {
-  return <section className="border-t border-slate-100 pt-5"><h3 className="mb-3 font-semibold">Source evidence</h3><div className="space-y-3">{result.importantDates.map((date,i) => <figure key={i} className="rounded-xl border-l-2 border-purple-300 bg-slate-50 p-4"><blockquote className="text-sm leading-6 text-slate-600">“{date.sourceText}”</blockquote><figcaption className="mt-2">{date.sourceUrl.startsWith("urn:poster:")?<span className="text-xs text-slate-500">Uploaded poster · vision transcription; review the original image</span>:<a className="source-link" href={date.sourceUrl} target="_blank" rel="noreferrer">{date.sourceUrl} ↗</a>}</figcaption></figure>)}</div><h4 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wider text-slate-400">Inspected sources {live?"":"· mock"}</h4><ul className="space-y-2">{result.sources.map(source => <li key={source.url} className="flex flex-wrap items-center justify-between gap-2 text-xs">{source.url.startsWith("urn:poster:")?<span>Uploaded poster · internal image reference</span>:<a href={source.url} target="_blank" rel="noreferrer" className="source-link">{source.title} ↗</a>}<span className="rounded bg-slate-100 px-2 py-1 text-slate-500">{source.status}</span></li>)}</ul></section>;
+export default function EvidenceList({result,live=false}:{result:OpportunityResult;live?:boolean}) {
+  const groups=new Map<string,{status:"fetched"|"partial"|"failed";quotes:Set<string>}>();
+  for(const source of result.sources)groups.set(source.url,{status:source.status,quotes:new Set()});
+  for(const date of result.importantDates){
+    if(!groups.has(date.sourceUrl))groups.set(date.sourceUrl,{status:"partial",quotes:new Set()});
+    if(date.sourceText)groups.get(date.sourceUrl)!.quotes.add(date.sourceText);
+  }
+  return <section className="border-t border-slate-100 pt-5" aria-label="Source evidence"><h3 className="mb-3 font-semibold">Source evidence {live?"":"· Demo"}</h3><div className="space-y-3">{[...groups].map(([url,group])=>{
+    const poster=url.startsWith("urn:poster:");
+    const hostname=poster?"":new URL(url).hostname;
+    const name=poster?"Uploaded poster":hostname.endsWith("contestkorea.com")?"ContestKorea":hostname;
+    return <div key={url} className="rounded-xl border-l-2 border-purple-300 bg-slate-50 p-4"><div className="mb-2 flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">{name}</h4><span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-500">{group.status}</span></div>{poster?<p className="text-xs text-slate-500">Vision transcription; review the original image</p>:<a className="source-link" href={url} target="_blank" rel="noreferrer">{url} ↗</a>}<ul className="mt-3 space-y-2">{[...group.quotes].map(quote=><li key={quote}><blockquote className="text-sm leading-6 text-slate-600">“{quote}”</blockquote></li>)}</ul></div>;
+  })}</div></section>;
 }

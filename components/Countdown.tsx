@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 export function countdownLabel(dueAt: string, now: number) {
+  if(/^\d{4}-\d{2}-\d{2}$/.test(dueAt)) {
+    const [year,month,day]=dueAt.split("-").map(Number);const today=new Date(now);
+    const days=Math.round((Date.UTC(year,month-1,day)-Date.UTC(today.getFullYear(),today.getMonth(),today.getDate()))/86400000);
+    return days<0?"Date passed":days===0?"Today":`${days} days left`;
+  }
   const remaining = new Date(dueAt).getTime() - now;
   if (!Number.isFinite(remaining)) return "Date unavailable";
   if (remaining <= 0) return "Date passed";

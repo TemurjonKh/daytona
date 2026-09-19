@@ -1,7 +1,8 @@
-import type { SavedEvent } from "@/lib/schema";
+import { SavedEvent } from "@/lib/schema";
 export async function registerEvent(event: SavedEvent, subscriptionEndpoint?: string) {
   const response = await fetch("/api/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event,subscriptionEndpoint})});
   if (!response.ok) throw new Error("Event could not be saved to the server.");
+  return SavedEvent.parse((await response.json()).event);
 }
 export function requestPushPermission(): Promise<NotificationPermission | "unsupported"> {
   if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) return Promise.resolve("unsupported");

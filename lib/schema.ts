@@ -18,9 +18,14 @@ export const OpportunityResult = z.object({
   conflicts: z.array(z.object({ field: z.string(), explanation: z.string(), sourceUrls: z.array(z.url()) })),
   confidence: Confidence,
 });
+export const Reminder = z.object({at:z.iso.datetime({offset:true}),label:z.string(),sent:z.boolean()});
+export const UserTimezone = z.string().refine(value => {
+  if (/^(?:GMT|UTC)[+-]/i.test(value) || /^[+-]/.test(value)) return false;
+  try {new Intl.DateTimeFormat("en-US",{timeZone:value});return true;} catch {return false;}
+}, "Invalid IANA timezone");
 export const SavedEvent = z.object({
   id: z.string(), title: z.string(), organization: z.string().nullable(), dueAt: z.string().nullable(),
-  kind: ImportantDateKind, reminderAt: z.string(), sourceUrl: z.url(), confidence: Confidence,
+  kind: ImportantDateKind, reminders: z.array(Reminder), timezone: UserTimezone, sourceUrl: z.url(), confidence: Confidence,
 });
 export type ImportantDate = z.infer<typeof ImportantDate>;
 export type OpportunityResult = z.infer<typeof OpportunityResult>;

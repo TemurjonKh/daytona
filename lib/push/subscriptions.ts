@@ -1,6 +1,6 @@
 import webpush from "web-push";
 import type { SavedEvent } from "@/lib/schema";
-export type PendingEvent = {event: SavedEvent; endpoint?: string; state: "pending" | "sending" | "sent" | "failed"};
+export type PendingEvent = {event: SavedEvent; endpoint?: string; delivery: Map<string, "sending" | "sent" | "failed">};
 type Store = {subscriptions: Map<string, webpush.PushSubscription>; events: Map<string, PendingEvent>; timer?: ReturnType<typeof setInterval>};
 const root = globalThis as typeof globalThis & {deadlinePush?: Store};
 export function pushStore(): Store {
