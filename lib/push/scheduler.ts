@@ -16,7 +16,7 @@ async function deliverDue() {
     try {
       const keys = vapidKeys();
       console.info("PUSH_SEND_START", record.event.id, new URL(subscription.endpoint).hostname);
-      const response = await webpush.sendNotification(subscription, JSON.stringify({id: record.event.id, title: "Opportunity reminder", body: `${record.event.title} — deadline reminder`}), {TTL: 120, timeout: 15_000, vapidDetails: {subject: "mailto:demo@deadline.local", ...keys}});
+      const response = await webpush.sendNotification(subscription, JSON.stringify({id: record.event.id, title: "Opportunity reminder", body: `${record.event.title} — ${record.event.kind === "deadline" ? "deadline" : record.event.kind === "event_start" ? "event" : "opportunity"} reminder`}), {TTL: 120, timeout: 15_000, vapidDetails: {subject: "mailto:demo@deadline.local", ...keys}});
       record.state = "sent";
       console.info("PUSH_SEND_SUCCESS", record.event.id, response.statusCode);
     } catch (error) {

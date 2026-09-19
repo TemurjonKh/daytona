@@ -1,4 +1,4 @@
-import { load } from "cheerio";
+import { loadBuffer } from "cheerio";
 import { validateUrl } from "@/lib/security/validate-url";
 import type { Source } from "@/lib/agent/types";
 export async function plainFetch(input: string): Promise<Source> {
@@ -13,10 +13,13 @@ export async function plainFetch(input: string): Promise<Source> {
       const contentType=response.headers.get('content-type')??'';
       if(!/text\/(html|plain)|application\/xhtml/i.test(contentType)) {await response.body?.cancel();throw new Error("Page fetch failed");}
       const reader=response.body?.getReader();if(!reader)throw new Error("Page fetch failed");
-      const decoder=new TextDecoder();let html='';let bytes=0;
-      while(true){const {done,value}=await reader.read();if(done)break;bytes+=value.length;if(bytes>2_000_000){await reader.cancel();break;}html+=decoder.decode(value,{stream:true});}html+=decoder.decode();
-      if(contentType.includes('text/plain'))return {title:new URL(url).hostname,url,canonicalUrl:null,text:html.replace(/\s+/g,' ').trim().slice(0,15000),links:[],method:'plain fetch'};
-      const $=load(html);const title=$('title').first().text().trim();const canonical=$('link[rel="canonical"]').attr('href');
+      const chunks:Uint8Array[]=[];let bytes=0;
+      while(true){const {done,value}=await reader.read();if(done)break;bytes+=value.length;if(bytes>2_000_000){await reader.cancel();throw new Error("Page too large");}chunks.push(value);}
+      const buffer=Buffer.concat(chunks);
+      const charset=contentType.match(/charset\s*=\s*["']?([^\s;"']+)/i)?.[1];
+      if(contentType.includes('text/plain')){const text=new TextDecoder(charset||'utf-8').decode(buffer);return {title:new URL(url).hostname,url,canonicalUrl:null,text:text.replace(/\s+/g,' ').trim().slice(0,15000),links:[],method:'plain fetch'};}
+      // Honor HTTP charset, BOM, and HTML meta declarations before extracting text.
+      const $=loadBuffer(buffer,{encoding:{transportLayerEncodingLabel:charset,defaultEncoding:'utf-8'}});const title=$('title').first().text().trim();const canonical=$('link[rel="canonical"]').attr('href');
       $('script,style,noscript,svg,template,nav,footer,header,[hidden],[aria-hidden="true"]').remove();
       const text=($('main').length?$('main').text():$('body').text()).replace(/\s+/g,' ').trim().slice(0,15000);
       return {title:title||new URL(url).hostname,url,canonicalUrl:canonical?new URL(canonical,url).href:null,text,links:[],method:'plain fetch'};
