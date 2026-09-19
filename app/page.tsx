@@ -1,69 +1,19 @@
-import Image from "next/image";
-
+"use client";
+import { useEffect, useState } from "react";
+import InputCard from "@/components/InputCard";
+import AgentActivity from "@/components/AgentActivity";
+import OpportunityResult from "@/components/OpportunityResult";
+import UpcomingPanel from "@/components/UpcomingPanel";
+import { mockResults, mockSavedEvents, type DemoState } from "@/lib/mock-data";
+import type { SavedEvent } from "@/lib/schema";
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+  const [state,setState] = useState<DemoState>("dated");
+  const [events,setEvents] = useState<SavedEvent[]>([]);
+  const [notice,setNotice] = useState("");
+  useEffect(() => {setEvents(mockSavedEvents(Date.now()));},[]);
+  return <><header className="border-b border-slate-200/70 bg-white"><div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-3 px-5 py-5 sm:px-8"><div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#6C5CE7] text-xl font-semibold text-white" aria-hidden="true">↗</span><span className="text-base font-semibold tracking-tight sm:text-lg">Opportunity Agent</span></div><span className="rounded-full border border-slate-200 px-3 py-1.5 text-xs text-slate-500">Powered by <strong className="font-semibold text-[#17213C]">Daytona</strong></span></div></header>
+    <main className="mx-auto w-full max-w-[1200px] px-5 pb-12 pt-9 sm:px-8 sm:pt-12"><div className="mb-8"><p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-purple-600">Find it. Understand it. Act on it.</p><h1 className="max-w-2xl text-3xl font-semibold leading-tight tracking-tight sm:text-[40px]">Never miss a deadline<br className="hidden sm:block"/> you found once.</h1><p className="mt-4 max-w-xl text-sm leading-7 text-slate-500">Paste an opportunity link or upload a poster and get a verified deadline with a reminder.</p></div>
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-400">WORKSPACE <span className="ml-2 text-slate-500">/ Opportunity explorer</span></p>{process.env.NODE_ENV === "development" && <div className="flex flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white p-1" aria-label="Demo state"><span className="px-2 text-xs text-slate-400">Demo state</span>{([["dated","Dated"],["rolling","Rolling"],["no-date","No date"],["conflict","Conflict"]] as const).map(([value,label]) => <button key={value} aria-pressed={state===value} onClick={() => {setState(value);setNotice("");}} className={`rounded-lg px-2.5 py-2 text-xs font-medium ${state===value ? "bg-purple-50 text-purple-700" : "text-slate-500 hover:bg-slate-50"}`}>{label}</button>)}</div>}</div>
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_310px]"><div className="min-w-0 space-y-5"><InputCard onInvestigate={() => setNotice("Mock preview loaded below. No investigation was run; use Demo state to explore results.")}/>{notice && <p role="status" className="rounded-xl bg-purple-50 px-4 py-3 text-sm text-purple-700">{notice}</p>}<AgentActivity statuses={state === "no-date" ? ["complete","complete","pending","failed","pending"] : state === "conflict" ? ["complete","complete","pending","complete","failed"] : undefined}/><OpportunityResult key={state} result={mockResults[state]} onSave={event => setEvents(previous => [...previous,event])} onTryAgain={() => {document.getElementById("source-url")?.focus();document.getElementById("input-title")?.scrollIntoView({behavior:"smooth",block:"center"});}}/></div><UpcomingPanel events={events}/></div>
+    <footer className="mt-9 flex flex-wrap justify-between gap-2 border-t border-slate-200 pt-5 text-xs text-slate-400"><span>Opportunity Agent · Deadline HackSprint</span><span>Phase 2 preview · all opportunities and evidence are mock data</span></footer></main></>;
 }
