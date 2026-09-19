@@ -15,9 +15,9 @@ export default function Home() {
   const [busy,setBusy]=useState(false);
   const [stages,setStages]=useState<Stage[]|undefined>();
   const [source,setSource]=useState<Source|null>(null);
-  async function runInvestigation(url:string,goal?:string) {
+  async function runInvestigation(url:string,goal?:string,poster?:File) {
     if(busy)return;setBusy(true);setStages([]);setSource(null);setResult(null);setNotice('');
-    try{await streamInvestigation(url,stage=>setStages(previous=>[...(previous??[]),stage]),setSource,setResult,goal);}
+    try{await streamInvestigation(url,stage=>setStages(previous=>[...(previous??[]),stage]),setSource,setResult,goal,poster);}
     catch(error){setNotice(error instanceof Error?error.message:'Investigation failed');}
     finally{setBusy(false);}
   }

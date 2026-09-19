@@ -1,7 +1,8 @@
 import { OpportunityResult } from "@/lib/schema";
 import type { Source, Stage } from "./types";
-export async function streamInvestigation(url:string,onStage:(stage:Stage)=>void,onSource:(source:Source)=>void,onResult:(result:OpportunityResult)=>void,goal?:string) {
-  const response=await fetch('/api/investigate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,goal})});
+export async function streamInvestigation(url:string,onStage:(stage:Stage)=>void,onSource:(source:Source)=>void,onResult:(result:OpportunityResult)=>void,goal?:string,poster?:File) {
+  const form=new FormData();if(poster)form.set('poster',poster);if(goal)form.set('goal',goal);
+  const response=await fetch('/api/investigate',poster?{method:'POST',body:form}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,goal})});
   if(!response.ok||!response.body)throw new Error('Investigation could not start');
   const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';let completed=false;let failure='';
   try{while(true){const {value,done}=await reader.read();buffer+=done?decoder.decode():decoder.decode(value,{stream:true});let end:number;
