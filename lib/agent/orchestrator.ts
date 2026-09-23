@@ -15,7 +15,7 @@ export async function investigate(input:string,emit:Emit,goal?:string,defer?:(ta
     const grounded=groundResult(draft,source);
     emit('stage',{stage:'verifying_evidence',status:'completed',message:grounded.dropped?`${grounded.dropped} ungrounded date entries dropped`:'Date quotes verified against the exact source slice'});
     emit('stage',{stage:'computing_confidence',status:'started'});
-    grounded.result.confidence=computeConfidence(grounded.result,url,grounded.dropped,grounded.weak);
+    grounded.result.confidence=computeConfidence(grounded.result,url,grounded.dropped,grounded.weak,grounded.contextual);
     emit('stage',{stage:'computing_confidence',status:'completed'});emit('result',grounded.result);
   }catch(error){const message=error instanceof Error?error.message:'Opportunity extraction failed';emit('stage',{stage:'extracting_opportunity',status:'failed',message,durationMs:Date.now()-extractionStarted});emit('result',noDateResult(source,message));emit('error',{message});emit('done',{ok:false});return;}
   emit('stage',{stage:'completed',status:'completed'});emit('done',{ok:true});
@@ -31,4 +31,4 @@ export async function fetchSource(input:string,emit:Emit=()=>{},options:{defer?:
   emit('stage',{stage:'source_extracted',status:'completed'});emit('source',source);
   return {...source,text:source.text.slice(0,15000)};
 }
-export async function extractGrounded(source:Source){const draft=await extractText(source);const grounded=groundResult(draft,source);grounded.result.confidence=computeConfidence(grounded.result,source.url,grounded.dropped,grounded.weak);return grounded.result;}
+export async function extractGrounded(source:Source){const draft=await extractText(source);const grounded=groundResult(draft,source);grounded.result.confidence=computeConfidence(grounded.result,source.url,grounded.dropped,grounded.weak,grounded.contextual);return grounded.result;}

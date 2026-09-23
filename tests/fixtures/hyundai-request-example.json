@@ -1,0 +1,98 @@
+{
+  "provenance": "Constructed offline fixture from the user-provided example evidence. This is NOT a recorded model response; the original image/response was not supplied. Empty unrelated fields are intentional.",
+  "recordedModelResponse": null,
+  "sourceEvidence": {
+    "sourceText": "모집기간 26.09.01(화) ~ 26.09.27(일)",
+    "yearContextText": "2026년 하반기 HD현대삼호 신입사원 채용"
+  },
+  "draft": {
+    "title": "HD Hyundai Samho entry-level recruitment",
+    "organization": "HD Hyundai Samho",
+    "opportunityType": "job",
+    "summary": "",
+    "importantDates": [
+      {
+        "label": "Applications open",
+        "kind": "application_open",
+        "value": "2026-09-01",
+        "precision": "date_only",
+        "timezone": null,
+        "yearResolution": "explicit",
+        "sourceUrl": "urn:poster:sha256:request-example",
+        "sourceText": "모집기간 26.09.01(화) ~ 26.09.27(일)",
+        "yearContextText": "2026년 하반기 HD현대삼호 신입사원 채용",
+        "visibleYears": [
+          2026
+        ]
+      },
+      {
+        "label": "Application deadline",
+        "kind": "deadline",
+        "value": "2026-09-27",
+        "precision": "date_only",
+        "timezone": null,
+        "yearResolution": "explicit",
+        "sourceUrl": "urn:poster:sha256:request-example",
+        "sourceText": "모집기간 26.09.01(화) ~ 26.09.27(일)",
+        "yearContextText": "2026년 하반기 HD현대삼호 신입사원 채용",
+        "visibleYears": [
+          2026
+        ]
+      }
+    ],
+    "eligibility": [],
+    "requirements": [],
+    "suggestedTasks": [],
+    "applicationUrl": null,
+    "sources": [
+      {
+        "url": "urn:poster:sha256:request-example",
+        "title": "Uploaded poster",
+        "status": "fetched"
+      }
+    ],
+    "conflicts": [],
+    "confidence": "low"
+  },
+  "expected": {
+    "title": "HD Hyundai Samho entry-level recruitment",
+    "organization": "HD Hyundai Samho",
+    "opportunityType": "job",
+    "summary": "",
+    "importantDates": [
+      {
+        "label": "Applications open",
+        "kind": "application_open",
+        "value": "2026-09-01",
+        "precision": "date_only",
+        "timezone": null,
+        "yearResolution": "explicit",
+        "sourceUrl": "urn:poster:sha256:request-example",
+        "sourceText": "모집기간 26.09.01(화) ~ 26.09.27(일)"
+      },
+      {
+        "label": "Application deadline",
+        "kind": "deadline",
+        "value": "2026-09-27",
+        "precision": "date_only",
+        "timezone": null,
+        "yearResolution": "explicit",
+        "sourceUrl": "urn:poster:sha256:request-example",
+        "sourceText": "모집기간 26.09.01(화) ~ 26.09.27(일)"
+      }
+    ],
+    "eligibility": [],
+    "requirements": [],
+    "suggestedTasks": [],
+    "applicationUrl": null,
+    "sources": [
+      {
+        "url": "urn:poster:sha256:request-example",
+        "title": "Uploaded poster",
+        "status": "fetched"
+      }
+    ],
+    "conflicts": [],
+    "confidence": "medium"
+  }
+}
