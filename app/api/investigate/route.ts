@@ -1,9 +1,11 @@
+import { installationRoute } from "@/lib/http";
 import { investigateImage } from "@/lib/openai/extract-image";
 import { investigate } from "@/lib/agent/orchestrator";
 import type { Emit } from "@/lib/agent/types";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
-export async function POST(request:Request) {
+export async function POST(request:Request) {return installationRoute(request,true,async()=>runInvestigation(request));}
+async function runInvestigation(request:Request) {
   let run:(emit:Emit)=>Promise<void>;
   if(request.headers.get('content-type')?.includes('multipart/form-data')){
     if(Number(request.headers.get('content-length')??0)>11*1024*1024)return Response.json({error:'Poster must be smaller than 10 MB'},{status:413});

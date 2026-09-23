@@ -1,0 +1,21 @@
+import { beforeEach,afterEach,describe,it,expect,vi } from 'vitest';
+import { database,installation,event,result,sub } from './helpers';
+import { saveOpportunity,listOpportunities,readOpportunity,importLegacy,saveSubscription } from '../lib/db/repository';
+import { pgliteAdapter } from '../lib/db/pglite';
+import { resolveInstallation } from '../lib/installations';
+import { sameOrigin } from '../lib/http';
+import { validTickToken } from '../lib/internal-auth';
+import { randomUUID } from 'node:crypto';
+let state:Awaited<ReturnType<typeof database>>;let id:string;
+beforeEach(async()=>{state=await database();id=await installation(state.db);});afterEach(async()=>{await state.pg.close();vi.unstubAllEnvs();});
+describe('milestone A persistence',()=>{
+ it('survives a new repository/adapter instance',async()=>{await saveOpportunity(state.db,id,event(),result);await saveSubscription(state.db,id,sub());const fresh=pgliteAdapter(state.pg);expect(await listOpportunities(fresh,id)).toHaveLength(1);expect((await fresh.query('SELECT id FROM push_subscriptions WHERE installation_id=$1',[id])).rows).toHaveLength(1);});
+ it('upserts by identity and preserves sent reminders',async()=>{const first=await saveOpportunity(state.db,id,event({reminders:[{at:'2020-01-01T00:00:00Z',label:'Already sent',sent:true}]}),result);const second=await saveOpportunity(state.db,id,event(),result);expect(second?.id).toBe(first?.id);expect(second?.reminders[0].sent).toBe(true);});
+ it('does not silently replace an accepted deadline',async()=>{await saveOpportunity(state.db,id,event(),result);await expect(saveOpportunity(state.db,id,event({dueAt:'2027-01-01'}),result)).rejects.toThrow();expect((await listOpportunities(state.db,id))[0]?.dueAt).toBe(result.importantDates[0].value);});
+ it('imports valid legacy rows idempotently and reports invalid indexes',async()=>{const old={...event(),reminderAt:'2020-01-01T00:00:00Z'};const rows=[old,{broken:true},old];expect(await importLegacy(state.db,id,rows,'Asia/Seoul')).toEqual({imported:1,skippedDuplicates:1,invalid:[{index:1,reason:'Invalid legacy opportunity'}]});expect((await importLegacy(state.db,id,rows,'Asia/Seoul')).imported).toBe(0);const saved=(await listOpportunities(state.db,id))[0];expect(saved?.acceptedResult).toBe(null);expect(saved?.monitoringEnabled).toBe(false);});
+ it('keeps legacy sent state',async()=>{await importLegacy(state.db,id,[event({reminders:[{at:'2020-01-01T00:00:00Z',label:'Sent',sent:true}]})],'Asia/Seoul');expect((await listOpportunities(state.db,id))[0]?.reminders[0].sent).toBe(true);});
+ it('rejects unknown client UUID as installation identity',async()=>{const supplied=randomUUID();const resolved=await resolveInstallation(state.db,supplied);expect(resolved.id).not.toBe(supplied);expect((await state.db.query('SELECT id FROM installations WHERE id=$1',[supplied])).rows).toHaveLength(0);expect((await resolveInstallation(state.db,resolved.id)).created).toBe(false);});
+ it('isolates reads and subscription ownership',async()=>{const a=await saveOpportunity(state.db,id,event(),result);const b=await installation(state.db);expect(await readOpportunity(state.db,b,a!.id)).toBe(null);expect(await listOpportunities(state.db,b)).toHaveLength(0);await saveSubscription(state.db,id,sub());await expect(saveSubscription(state.db,b,sub())).rejects.toThrow();});
+ it('requires Origin on browser mutations',()=>{expect(sameOrigin(new Request('https://app.test/api',{headers:{host:'app.test'}}))).toBe(false);expect(sameOrigin(new Request('https://app.test/api',{headers:{host:'app.test',origin:'https://app.test'}}))).toBe(true);});
+ it('authenticates tick independently of Origin',()=>{vi.stubEnv('CRON_SECRET','test-secret');expect(validTickToken(new Request('https://app.test/tick'))).toBe(false);expect(validTickToken(new Request('https://app.test/tick',{headers:{authorization:'Bearer wrong'}}))).toBe(false);expect(validTickToken(new Request('https://app.test/tick',{headers:{authorization:'Bearer test-secret'}}))).toBe(true);vi.stubEnv('CRON_SECRET','');expect(validTickToken(new Request('https://app.test/tick',{headers:{authorization:'Bearer test-secret'}}))).toBe(false);});
+});

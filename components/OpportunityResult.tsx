@@ -23,23 +23,22 @@ export default function OpportunityResult({result,onSave,onTryAgain,savedEvents,
   const displayDate = (value:ImportantDate) => value.precision === "date_time" && !timezone ? "Loading local time…" : formatDate(value);
   const otherDates = result.importantDates.filter(d => d !== date && d.kind !== "rolling");
   async function save() {
-    if(saving.current || !timezone)return;
+    if(saving.current || !timezone || !live)return;
     const candidate=custom || !target ? [{at:new Date(reminder).getTime(),label:"Custom reminder"}] : automaticReminders(target).map(p=>({at:Date.parse(p.at),label:`${p.days} ${p.days===1?"day":"days"} before`}));
     if(candidate.some(r=>!Number.isFinite(r.at))){setMessage("Choose a valid reminder time.");return;}
     const future=candidate.filter(r=>r.at>Date.now());
     if(!future.length){setMessage("These reminder times have passed. Customize a future reminder.");return;}
     saving.current=true;setBusy(true);setSaved(false);
-    const permission=requestPushPermission();
     try {
       const identity={title:result.title,dueAt:target?.value??null,sourceUrl:result.sources[0].url};
       const previous=savedEvents.find(e=>opportunityIdentity(e)===opportunityIdentity(identity));
       let event:SavedEvent={...identity,id:previous?.id??crypto.randomUUID(),organization:result.organization,kind:target?.kind??(rolling?"rolling":"other"),confidence:result.confidence,timezone:detectedTimezone(),reminders:mergeReminders(future.map(r=>({at:new Date(r.at).toISOString(),label:r.label,sent:false})),previous?.reminders)};
-      event=await registerEvent(event);onSave(event);
+      event=await registerEvent(event,result);onSave(event);
+      const permission=requestPushPermission();
       const allowed=await permission;
       if(allowed!=="granted"){setMessage(`Notification permission: ${allowed}. Opportunity saved; allow notifications and save again to schedule.`);return;}
-      const endpoint=await enablePush();
-      event=await registerEvent(event,endpoint);onSave(event);setSaved(true);
-      setMessage(`Opportunity saved with ${event.reminders.filter(r=>!r.sent&&Date.parse(r.at)>Date.now()).length} pending reminders. ${future.length<candidate.length?"Past reminders skipped. ":""}Keep the server running.`);
+      await enablePush();setSaved(true);
+      setMessage(`Opportunity saved with ${event.reminders.filter(r=>!r.sent&&Date.parse(r.at)>Date.now()).length} pending reminders. ${future.length<candidate.length?"Past reminders skipped. ":""}Delivery depends on the configured scheduler.`);
     } catch(error){setMessage(error instanceof Error?error.message:"Reminder setup failed. Retry to finish scheduling.");}
     finally{saving.current=false;setBusy(false);}
   }
@@ -66,7 +65,7 @@ export default function OpportunityResult({result,onSave,onTryAgain,savedEvents,
       {target && <p className="mb-3 text-sm"><strong>Reminder target:</strong> {target.kind === "event_start" ? "Event date" : primaryIsScoped ? date?.label : "Registration deadline"} — {displayDate(target)}</p>}
       {target ? <div className="mb-4"><h3 className="font-semibold">Reminders</h3><ul className="mt-2 space-y-1 text-sm">{plans.map(plan=><li key={plan.days}>✓ {plan.days} {plan.days === 1 ? "day" : "days"} before — {localReminderLabel(plan.at)}{Date.parse(plan.at) <= Date.now() ? " (passed; will be skipped)" : ""}</li>)}</ul>{target.precision === "date_only" && <p className="mt-2 text-xs text-slate-500">09:00 in your local timezone is a reminder preference, not a time printed by the source.</p>}<label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={custom} disabled={busy} onChange={e=>setCustom(e.target.checked)}/>Customize with one reminder instead</label></div> : <p className="mb-3 text-sm text-slate-500">No unambiguous reminder target. Choose a reminder time.</p>}
       {(custom || !target) && <><label htmlFor="reminder" className="field-label">Remind me at (your local time)</label><input id="reminder" disabled={busy} type="datetime-local" value={reminder} min={localDateTime(Date.now())} onChange={e=>{setReminder(e.target.value);setMessage("");}} className="input"/></>}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-4">{result.applicationUrl && <a href={result.applicationUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-purple-600">Application link ↗</a>}<button disabled={busy || !timezone} onClick={save} className="primary disabled:opacity-50">{saved ? "Update reminders" : "Save and remind me"}</button></div><p className="mt-3 text-xs text-slate-400">Reminders require this server to stay running.</p>{message && <p role="status" className="mt-3 text-sm text-purple-700">{message}</p>}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-4">{result.applicationUrl && <a href={result.applicationUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-purple-600">Application link ↗</a>}<button disabled={busy || !timezone || !live} onClick={save} className="primary disabled:opacity-50">{saved ? "Update reminders" : "Save and remind me"}</button></div><p className="mt-3 text-xs text-slate-400">Reminders are stored securely for scheduled delivery.</p>{message && <p role="status" className="mt-3 text-sm text-purple-700">{message}</p>}
     </div>}
   </div></section>;
 }

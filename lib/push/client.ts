@@ -1,6 +1,6 @@
-import { SavedEvent } from "@/lib/schema";
-export async function registerEvent(event: SavedEvent, subscriptionEndpoint?: string) {
-  const response = await fetch("/api/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event,subscriptionEndpoint})});
+import { SavedEvent, type OpportunityResult } from "@/lib/schema";
+export async function registerEvent(event: SavedEvent, result: OpportunityResult) {
+  const response = await fetch("/api/opportunities",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({event,result})});
   if (!response.ok) throw new Error("Event could not be saved to the server.");
   return SavedEvent.parse((await response.json()).event);
 }
