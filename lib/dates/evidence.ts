@@ -42,7 +42,7 @@ export function extractDateTokens(text:string):DateToken[] {
  };
  for(const m of text.matchAll(/(?<![\d./-])(\d{2}|\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/gu))add(m,[{year:+m[1],yearDigits:yearDigits(m[1]),month:+m[2],day:+m[3],order:'ymd'}]);
  // Claim the whole three-part token even if invalid, so it cannot be reparsed as a valid substring.
- for(const m of text.matchAll(/(?<![\d./-])(\d{1,4})([./-])(\d{1,2})\2(\d{1,4})(?![\d./-])/g)){
+ for(const m of text.matchAll(/(?<![\d./-])(\d{1,4})([./-])(\d{1,2})\2(\d{1,4})\.?(?![\d./-])/g)){
    const readings:Reading[]=[];
    if(yearDigits(m[1])&&m[4].length<=2)readings.push({year:+m[1],yearDigits:yearDigits(m[1]),month:+m[3],day:+m[4],order:'ymd'});
    if(m[1].length<=2&&yearDigits(m[4]))readings.push({year:+m[4],yearDigits:yearDigits(m[4]),month:+m[1],day:+m[3],order:'mdy'});
@@ -51,7 +51,7 @@ export function extractDateTokens(text:string):DateToken[] {
  for(const m of text.matchAll(new RegExp(`\\b(${monthPattern})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}|\\d{2})(?![\\d:./-]))?\\b`,'gi')))add(m,[{year:m[3]?+m[3]:null,yearDigits:m[3]?yearDigits(m[3]):0,month:months.findIndex(x=>x.startsWith(m[1].slice(0,3).toLowerCase()))+1,day:+m[2],order:'month_name'}]);
  for(const m of text.matchAll(new RegExp(`(?<!\\d)(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthPattern})\\.?(?:\\s+(\\d{4}|\\d{2})(?![\\d:./-]))?`,'gi')))add(m,[{year:m[3]?+m[3]:null,yearDigits:m[3]?yearDigits(m[3]):0,month:months.findIndex(x=>x.startsWith(m[2].slice(0,3).toLowerCase()))+1,day:+m[1],order:'day_month_name'}]);
  for(const m of text.matchAll(/(?<!\d)(\d{1,2})월\s*(\d{1,2})일/gu))add(m,[{year:null,yearDigits:0,month:+m[1],day:+m[2],order:'md'}]);
- for(const m of text.matchAll(/(?<![\d./-])(\d{1,2})([./])(\d{1,2})(?![\d./-])/g))add(m,[{year:null,yearDigits:0,month:+m[1],day:+m[3],order:'md'}],true);
+ for(const m of text.matchAll(/(?<![\d./-])(\d{1,2})([./])(\d{1,2})\.?(?![\d./-])/g))add(m,[{year:null,yearDigits:0,month:+m[1],day:+m[3],order:'md'}],true);
  // English same-month ranges retain the printed bare-day endpoint as its own token.
  for(const token of [...tokens]){
   if(token.readings.length!==1||!['month_name','day_month_name'].includes(token.readings[0].order))continue;
