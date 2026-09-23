@@ -80,3 +80,6 @@ work/
 *.swp
 *.swo
 *~
+
+# Local acceptance images may contain private or unlicensed material
+/fixtures/unseen/

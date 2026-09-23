@@ -1,7 +1,7 @@
 import type { ImportantDate } from "@/lib/schema";
 
 // Shared by web and image grounding. Labels apply to the local evidence, not page-wide text.
-export const applicationPeriod = /지원\s*모집|모집\s*기간|접수\s*기간|지원\s*기간|신청\s*기간|원서\s*접수|서류\s*접수|application\s+(?:period|window|dates)|registration\s+period|applications?\s+open|apply\s+between/iu;
+export const applicationPeriod = /지원\s*모집|모집\s*(?:기간|일정)|채용\s*기간|접수\s*기간|지원\s*기간|신청\s*기간|원서\s*접수|서류\s*접수|application\s+(?:period|window|dates)|registration\s+period|applications?\s+open|apply\s+between/iu;
 export const applicationCutoff = /마감|접수\s*기한|지원\s*기한|신청\s*기한|\bdeadline\b|\bapply\s+by\b|\bclosing\s+date\b|\bapplications?\s+(?:close[sd]?|due)\b|\bregistration\s+(?:deadline|closes?)\b/iu;
 export const rollingPattern = /\brolling\b|until (?:all .* )?filled|상시\s*채용|채용\s*시\s*마감/iu;
 const eventPeriod = /행사|공연|콘서트|박람회|전시|축제|개최|\bevent\b|\bconcert\b|\bfair\b|\bfestival\b|\bconference\b|\bexhibition\b/iu;
@@ -52,6 +52,16 @@ export function extractDateTokens(text:string):DateToken[] {
  for(const m of text.matchAll(new RegExp(`(?<!\\d)(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthPattern})\\.?(?:\\s+(\\d{4}|\\d{2})(?![\\d:./-]))?`,'gi')))add(m,[{year:m[3]?+m[3]:null,yearDigits:m[3]?yearDigits(m[3]):0,month:months.findIndex(x=>x.startsWith(m[2].slice(0,3).toLowerCase()))+1,day:+m[1],order:'day_month_name'}]);
  for(const m of text.matchAll(/(?<!\d)(\d{1,2})월\s*(\d{1,2})일/gu))add(m,[{year:null,yearDigits:0,month:+m[1],day:+m[2],order:'md'}]);
  for(const m of text.matchAll(/(?<![\d./-])(\d{1,2})([./])(\d{1,2})(?![\d./-])/g))add(m,[{year:null,yearDigits:0,month:+m[1],day:+m[3],order:'md'}],true);
+ // English same-month ranges retain the printed bare-day endpoint as its own token.
+ for(const token of [...tokens]){
+  if(token.readings.length!==1||!['month_name','day_month_name'].includes(token.readings[0].order))continue;
+  const tail=text.slice(token.end).match(/^\s*(?:~|-|–|—|to|through)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}|\d{2})(?![\d:./-]))?(?![\d:./])/i)
+   ??text.slice(token.end).match(/^\s*[-–—~]\s*(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}|\d{2})(?![\d:./-]))?(?![\d:./])/i);
+  if(!tail)continue;
+  const offset=tail[0].indexOf(tail[1]);
+  const match=[tail[0].slice(offset)] as RegExpMatchArray;match.index=token.end+offset;
+  add(match,[{year:tail[2]?+tail[2]:null,yearDigits:tail[2]?yearDigits(tail[2]):0,month:token.readings[0].month,day:+tail[1],order:'month_name_range'}]);
+ }
  return tokens.sort((a,b)=>a.start-b.start);
 }
 
@@ -256,4 +266,100 @@ export function normalizeDateCandidates(candidates:DateCandidate[],options:Evide
  const final=[...unique.values()];const decisions=final.map(e=>e.decision);
  const dropped=candidateDecisions.filter((d,i)=>!d.accepted&&!repaired.has(evidenceKey(candidates[i]))).length;
  return {dates:final.map(e=>e.date),decisions,candidateDecisions,completedRanges,dropped,weak:decisions.some(d=>d.weak),contextual:decisions.some(d=>d.yearSource==='contextual_four_digit')};
+}
+
+// Internal poster evidence; public ImportantDate and persisted result schemas stay unchanged.
+export type TranscriptionLine = {
+ id:string; originalText:string; posterRegionId:string; supportingViewIds:string[]; corroborated:boolean;
+};
+export type ParsedDateCandidate = {
+ id:string; value:string|null; kind:ImportantDate['kind']; yearSource:YearSource;
+ reasons:string[]; tokenText:string; role:'start'|'end'|'single'; precision?:ImportantDate['precision']; timezone?:string|null;
+};
+export type DiscoveredDateEvidence = TranscriptionLine & {
+ lineId:string; nearbyLabel:string|null; yearContextText:string|null; visibleYears:number[];
+ candidates:ParsedDateCandidate[]; reasons:string[];
+};
+export const nearbyDateLabel = new RegExp(`${applicationPeriod.source}|${applicationCutoff.source}|${eventPeriod.source}|${otherPeriod.source}|일시|행사일|개최일|event\\s+(?:date|time)|\\bresults\\b`, 'iu');
+const timeToken = /(?<![\d:])(?:[01]?\d|2[0-3]):[0-5]\d(?!\d)|(?:오전|오후)\s*\d{1,2}시|\b(?:1[0-2]|0?[1-9])\s*(?:am|pm)\b/giu;
+
+/** Discovery precedes classification. It does not inspect a model's chosen dates. */
+export function discoverDateEvidence(lines:TranscriptionLine[]):DiscoveredDateEvidence[] {
+ const result:DiscoveredDateEvidence[]=[];
+ for(const region of new Set(lines.map(l=>l.posterRegionId))){
+  const regionLines=lines.filter(l=>l.posterRegionId===region);
+  // All visible year-bearing lines in THIS poster are available for conservative conflict checking.
+  const contextLines=regionLines.filter(l=>fullYears(l.originalText).length&&!/copyright|all rights reserved|저작권|©/iu.test(l.originalText));
+  const yearContextText=contextLines.map(l=>l.originalText).join('\n')||null;
+  const visibleYears=[...new Set(contextLines.flatMap(l=>fullYears(l.originalText)))];
+  for(let index=0;index<regionLines.length;index++){
+   const line=regionLines[index];const tokens=extractDateTokens(line.originalText);
+   const times=[...line.originalText.matchAll(timeToken)];
+   if(!tokens.length&&!times.length&&!rollingPattern.test(line.originalText))continue;
+   const previous=regionLines[index-1];
+   const sameLabel=nearbyDateLabel.test(line.originalText);
+   // Unknown labels are retained too, but never borrow across another date or poster.
+   const nearbyLabel=sameLabel?line.originalText:previous&&!extractDateTokens(previous.originalText).length&&previous.originalText.length<=160?previous.originalText:null;
+   const prefix=!sameLabel&&nearbyLabel?nearbyLabel+'\n':'';
+   const text=prefix+line.originalText;const parsedTokens=extractDateTokens(text);const pairs=ranges(text,parsedTokens);
+   const evidenceId=`evidence-${result.length+1}`;
+   const candidates:ParsedDateCandidate[]=[];
+   for(const [tokenIndex,token] of parsedTokens.entries()){
+    const range=pairs.find(r=>r.start===token||r.end===token);
+    const reasons:string[]=[];
+    let readings=token.readings;
+    if(readings.length>1&&visibleYears.length===1)readings=readings.filter(r=>r.yearDigits&&yearMatches(r,visibleYears[0]));
+    let value:string|null=null;let yearSource:YearSource='unknown';
+    const reading=readings.length===1?readings[0]:null;
+    const resolveYear=(r:Reading):number|null=>r.yearDigits===4?r.year:r.yearDigits===2?(visibleYears.length===1?Math.floor(visibleYears[0]/100)*100+r.year!:null):visibleYears.length===1?visibleYears[0]:null;
+    if(!reading)reasons.push(readings.length>1?'ambiguous_numeric_date':'unsupported_date_format');
+    else{
+     let year=resolveYear(reading);
+     yearSource=reading.yearDigits===4?'inline_four_digit':reading.yearDigits===2?'inline_two_digit':year!==null?'contextual_four_digit':'unknown';
+     if(range?.end===token&&!reading.yearDigits&&range.kind){
+      const startReadings=range.start.readings;
+      if(startReadings.length===1){const start=startReadings[0];const startYear=resolveYear(start);
+       if(startYear!==null){
+        year=startYear+(reading.month*100+reading.day<start.month*100+start.day?1:0);
+        const days=(Date.UTC(year,reading.month-1,reading.day)-Date.UTC(startYear,start.month-1,start.day))/86400000;
+        if(days>=0&&days<=370)yearSource='range_inherited_year';else{year=null;reasons.push('invalid_range_year');}
+       }
+      }
+     }
+     if(!reading.yearDigits&&visibleYears.length>1&&yearSource!=='range_inherited_year'){year=null;reasons.push('contextual_year_conflict');}
+     if(year!==null&&validYMD(year,reading.month,reading.day)){
+      value=isoDate(year,reading.month,reading.day);
+      if(token.weekday!==null&&new Date(Date.UTC(year,reading.month-1,reading.day)).getUTCDay()!==token.weekday)reasons.push('weekday_mismatch');
+     }else reasons.push(year===null?'missing_year_evidence':'unsupported_date_format');
+    }
+    const role=range?(range.start===token?'start':'end'):'single';
+    const labelKind=range?.kind??localLabel((nearbyLabel??'')+' '+line.originalText.slice(0,tokens[tokenIndex]?.start??0));
+    let kind:ImportantDate['kind']='other';
+    if(range?.kind==='application')kind=role==='start'?'application_open':'deadline';
+    else if(range?.kind==='event')kind=role==='start'?'event_start':'event_end';
+    else if(labelKind==='application'&&applicationCutoff.test(nearbyLabel??line.originalText))kind='deadline';
+    else if(labelKind==='application'&&/applications?\s+open/iu.test(nearbyLabel??line.originalText))kind='application_open';
+    else if(labelKind==='event')kind='event_start';
+    let precision:ImportantDate['precision']='date_only';let timezone:string|null=null;
+    const tail=text.slice(token.end,parsedTokens[tokenIndex+1]?.start??text.length);
+    const clock=tail.match(/(?:오전|오후)?\s*(\d{1,2})(?::(\d{2})|시(?:\s*(\d{1,2})분)?)(?:\s*(am|pm))?/i);
+    const zone=tail.match(/\b(UTC|GMT|KST|JST)\b(?:\s*([+-]\d{2}:?\d{2}))?|(?<!\d)([+-]\d{2}:\d{2})(?!\d)/i);
+    if(value&&clock&&zone){
+     let hour=+clock[1];const minute=+(clock[2]??clock[3]??0);
+     if(/오후|pm/i.test(clock[0]))hour=hour%12+12;else if(/오전|am/i.test(clock[0]))hour%=12;
+     const baseZone=zone[1]?.toUpperCase();
+     let offset=zone[2]??zone[3]??(baseZone==='KST'||baseZone==='JST'?'+09:00':'+00:00');
+     if(offset.length===5)offset=offset.slice(0,3)+':'+offset.slice(3);
+     if(hour<24&&minute<60&&+offset.slice(1,3)<=14&&+offset.slice(4)<=59){
+      value+=`T${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}:00${offset}`;precision='date_time';
+      timezone=baseZone==='KST'?'Asia/Seoul':baseZone==='JST'?'Asia/Tokyo':offset==='+00:00'?'UTC':null;
+     }
+    }
+    candidates.push({id:`${evidenceId}-candidate-${tokenIndex+1}`,value,kind,yearSource,reasons,tokenText:token.text,role,precision,timezone});
+   }
+   if(!candidates.length)candidates.push({id:`${evidenceId}-candidate-1`,value:null,kind:rollingPattern.test(text)?'rolling':'other',yearSource:'unknown',reasons:times.length?['time_without_date']:[],tokenText:times[0]?.[0]??line.originalText,role:'single'});
+   result.push({...line,id:evidenceId,lineId:line.id,nearbyLabel,yearContextText,visibleYears,candidates,reasons:[...new Set(candidates.flatMap(c=>c.reasons))]});
+  }
+ }
+ return result;
 }

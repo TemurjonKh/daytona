@@ -1,8 +1,8 @@
 import { beforeEach,it,expect,vi } from 'vitest';
-import { createHash } from 'node:crypto';
+import sharp from 'sharp';
 import type { OpportunityResult } from '../lib/schema';
-const api=vi.hoisted(()=>({parse:vi.fn()}));
-vi.mock('openai',()=>({default:class{chat={completions:{parse:api.parse}}}}));
+const api=vi.hoisted(()=>({parse:vi.fn(),create:vi.fn()}));
+vi.mock('openai',()=>({default:class{chat={completions:{parse:api.parse,create:api.create}}}}));
 import { investigateImage,normalizeImageResult } from '../lib/openai/extract-image';
 import { extractText } from '../lib/openai/extract-text';
 import { ExtractionDraft,extractionSchema } from '../lib/openai/extraction-draft';
@@ -14,15 +14,16 @@ it('request-provided Hyundai example normalizes with inline-two-digit diagnostic
  expect(result.result).toEqual(fixture.expected);expect(result.decisions.map(d=>d.yearSource)).toEqual(['inline_two_digit','inline_two_digit']);
  expect(fixture.recordedModelResponse).toBeNull();
 });
-it('mocked image extraction sends original bytes at high detail and emits only the public contract',async()=>{
- const bytes=Buffer.from('original image bytes are not resized by this pipeline');
- const id='urn:poster:sha256:'+createHash('sha256').update(bytes).digest('hex');
- const raw=structuredClone(fixture.draft);raw.importantDates.forEach(d=>{d.sourceUrl=id;});raw.sources[0].url=id;
- api.parse.mockResolvedValue({choices:[{message:{parsed:raw}}]});
+it('mocked image extraction uses two evidence-first calls and emits only the public contract',async()=>{
+ process.env.OPENAI_MODEL='gpt-4.1-mini';
+ const bytes=await sharp({create:{width:600,height:800,channels:3,background:'white'}}).png().toBuffer();
+ api.create.mockResolvedValueOnce({choices:[{finish_reason:'stop',message:{content:JSON.stringify({views:[{viewId:'context',posterRegionId:'poster-1',lines:[fixture.sourceEvidence.yearContextText,fixture.sourceEvidence.sourceText]}]})}}]})
+  .mockResolvedValueOnce({choices:[{finish_reason:'stop',message:{content:JSON.stringify({regions:[{posterRegionId:'poster-1',title:'Recruitment',organization:null,opportunityType:'job',summary:'Recruitment applications.',eligibility:[],requirements:[],suggestedTasks:[],applicationUrl:null}],mappings:[]})}}]});
  const events:{event:string;data:unknown}[]=[];await investigateImage(bytes,'image/png',(event,data)=>events.push({event,data}));
- expect(api.parse).toHaveBeenCalledTimes(1);const request=api.parse.mock.calls[0][0];
- expect(request.messages[1].content[1]).toEqual({type:'image_url',image_url:{url:'data:image/png;base64,'+bytes.toString('base64'),detail:'high'}});
- expect(request.messages[0].content).toContain('yearContextText');expect(request.messages[0].content).toContain('neighboring posters');
+ expect(api.create).toHaveBeenCalledTimes(2);expect(api.parse).not.toHaveBeenCalled();
+ const request=api.create.mock.calls[0][0];
+ expect(request.messages[1].content.at(-1).image_url.detail).toBe('high');
+ expect(request.messages[0].content).toContain('TRANSCRIBE only');
  const result=events.find(e=>e.event==='result')!.data as OpportunityResult;
  expect(result.importantDates.map(d=>d.value)).toEqual(['2026-09-01','2026-09-27']);
  expect(result.importantDates[0]).not.toHaveProperty('yearContextText');expect(result.importantDates[0].sourceText).toBe(fixture.sourceEvidence.sourceText);

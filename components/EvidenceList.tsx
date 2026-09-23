@@ -9,7 +9,7 @@ export default function EvidenceList({result,live=false}:{result:OpportunityResu
   return <section className="border-t border-slate-100 pt-5" aria-label="Source evidence"><h3 className="mb-3 font-semibold">Source evidence {live?"":"· Demo"}</h3><div className="space-y-3">{[...groups].map(([url,group])=>{
     const poster=url.startsWith("urn:poster:");
     const hostname=poster?"":new URL(url).hostname;
-    const name=poster?"Uploaded poster":hostname.endsWith("contestkorea.com")?"ContestKorea":hostname;
+    const name=poster?(result.sources.find(s=>s.url===url)?.title??"Uploaded poster"):hostname.endsWith("contestkorea.com")?"ContestKorea":hostname;
     return <div key={url} className="rounded-xl border-l-2 border-purple-300 bg-slate-50 p-4"><div className="mb-2 flex items-center justify-between gap-2"><h4 className="text-sm font-semibold">{name}</h4><span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-500">{group.status}</span></div>{poster?<p className="text-xs text-slate-500">Vision transcription; review the original image</p>:<a className="source-link" href={url} target="_blank" rel="noreferrer">{url} ↗</a>}<ul className="mt-3 space-y-2">{[...group.quotes].map(quote=><li key={quote}><blockquote className="text-sm leading-6 text-slate-600">“{quote}”</blockquote></li>)}</ul></div>;
   })}</div></section>;
 }
