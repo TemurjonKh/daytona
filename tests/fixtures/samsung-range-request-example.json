@@ -1,0 +1,88 @@
+{
+  "provenance": "Constructed from the user-provided range quote and expected dates, NOT a recorded model response. The recorded raw Samsung JSON has not been supplied. This draft simulates omission; tests also simulate null and removed candidates.",
+  "recordedModelResponse": null,
+  "sourceEvidence": {
+    "sourceUrl": "urn:poster:sha256:samsung-request-example",
+    "sourceText": "지원 모집 : 09.08(화) ~ 09.15(화) 17:00",
+    "yearContextText": "2026년 하반기",
+    "visibleYears": [
+      2026
+    ]
+  },
+  "draft": {
+    "title": "Autumn recruitment",
+    "organization": null,
+    "opportunityType": "job",
+    "summary": "",
+    "importantDates": [
+      {
+        "label": "Applications open",
+        "kind": "application_open",
+        "value": "2026-09-08",
+        "precision": "date_only",
+        "timezone": null,
+        "yearResolution": "explicit",
+        "sourceUrl": "urn:poster:sha256:samsung-request-example",
+        "sourceText": "지원 모집 : 09.08(화) ~ 09.15(화) 17:00",
+        "yearContextText": "2026년 하반기",
+        "visibleYears": [
+          2026
+        ]
+      }
+    ],
+    "eligibility": [],
+    "requirements": [],
+    "suggestedTasks": [],
+    "applicationUrl": null,
+    "sources": [
+      {
+        "url": "urn:poster:sha256:samsung-request-example",
+        "title": "Uploaded poster",
+        "status": "fetched"
+      }
+    ],
+    "conflicts": [],
+    "confidence": "low"
+  },
+  "expected": {
+    "title": "Autumn recruitment",
+    "organization": null,
+    "opportunityType": "job",
+    "summary": "",
+    "importantDates": [
+      {
+        "label": "Applications open",
+        "kind": "application_open",
+        "value": "2026-09-08",
+        "precision": "date_only",
+        "timezone": null,
+        "yearResolution": "explicit",
+        "sourceUrl": "urn:poster:sha256:samsung-request-example",
+        "sourceText": "지원 모집 : 09.08(화) ~ 09.15(화) 17:00"
+      },
+      {
+        "label": "Application deadline",
+        "kind": "deadline",
+        "value": "2026-09-15",
+        "precision": "date_only",
+        "timezone": null,
+        "yearResolution": "explicit",
+        "sourceUrl": "urn:poster:sha256:samsung-request-example",
+        "sourceText": "지원 모집 : 09.08(화) ~ 09.15(화) 17:00"
+      }
+    ],
+    "eligibility": [],
+    "requirements": [],
+    "suggestedTasks": [],
+    "applicationUrl": null,
+    "sources": [
+      {
+        "url": "urn:poster:sha256:samsung-request-example",
+        "title": "Uploaded poster",
+        "status": "fetched"
+      }
+    ],
+    "conflicts": [],
+    "confidence": "medium"
+  }
+}

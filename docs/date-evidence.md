@@ -8,7 +8,7 @@ The old image and URL validators looked for the candidate's literal four-digit y
 2. Check the structured candidate's calendar validity and match year/month/day. An inline four-digit year is strongest; an inline two-digit year must match the candidate's final two year digits. Exactly one numeric interpretation must match; indistinguishable matches are rejected.
 3. For a yearless token, require separately preserved contextual evidence with one non-conflicting year, or inherit a printed range-start year. URL context must occur verbatim in the exact 15,000-character model slice. Only sourceText and yearContextText participate in contextual conflict checks, never the rest of the page. Image visibleYears must be supported by its context transcription; unsupported years are ignored and diagnosed.
 4. A yearless end inherits only within a contiguous, labeled range. A December-to-January rollover can add one year, provided the end follows the start, no conflicting year is present, and the range is at most 370 days. Unrelated dates never inherit each other's years.
-5. Shared local labels map application ranges to application_open/deadline and event ranges to event_start/event_end. A standalone period label does not establish a deadline. Judging/interview/announcement evidence cannot become an application cutoff without explicit application wording.
+5. Shared local labels map application ranges to application_open/deadline and event ranges to event_start/event_end. The normalizer now also parses each grounded application-period quote independently of candidate count, completes missing endpoints, and deduplicates equivalent dates. See [range completion](range-completion.md). A standalone period label does not establish a deadline. Judging/interview/announcement evidence cannot become an application cutoff without explicit application wording.
 6. Weekdays are diagnostic: mismatch sets weak=true and lowers confidence, without discarding a supported date. Without a printed time, output remains date_only. Existing explicitly marked URL inference remains opt-in and low confidence; images never invent a year.
 
 ## Supported formats
@@ -52,7 +52,7 @@ Tests use offline evidence and mocked API responses, including original-byte/hig
 
 Image context is still a vision transcription, not independently OCR-verified. No text-only algorithm can prove that a model took a year from the correct physical poster when its transcription omits the neighboring conflicting evidence. The prompt limits evidence to the dominant poster, and the validator rejects conflicting validated years. Wide/portrait/angled image quality still depends on the vision model; there are no crops, coordinates, resizing or layout-specific patches.
 
-## Verified results and changed files
+## Initial shared-validator verification and changed files
 
 - Baseline: 37 existing tests passed in 5 files.
 - Final: 138 tests passed, 0 failed, in 7 files (101 new cases plus all 37 existing cases).

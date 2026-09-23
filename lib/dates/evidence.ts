@@ -1,7 +1,7 @@
 import type { ImportantDate } from "@/lib/schema";
 
 // Shared by web and image grounding. Labels apply to the local evidence, not page-wide text.
-export const applicationPeriod = /모집\s*기간|접수\s*기간|지원\s*기간|신청\s*기간|원서\s*접수|서류\s*접수|application\s+(?:period|window|dates)|registration\s+period|applications?\s+open|apply\s+between/iu;
+export const applicationPeriod = /지원\s*모집|모집\s*기간|접수\s*기간|지원\s*기간|신청\s*기간|원서\s*접수|서류\s*접수|application\s+(?:period|window|dates)|registration\s+period|applications?\s+open|apply\s+between/iu;
 export const applicationCutoff = /마감|접수\s*기한|지원\s*기한|신청\s*기한|\bdeadline\b|\bapply\s+by\b|\bclosing\s+date\b|\bapplications?\s+(?:close[sd]?|due)\b|\bregistration\s+(?:deadline|closes?)\b/iu;
 export const rollingPattern = /\brolling\b|until (?:all .* )?filled|상시\s*채용|채용\s*시\s*마감/iu;
 const eventPeriod = /행사|공연|콘서트|박람회|전시|축제|개최|\bevent\b|\bconcert\b|\bfair\b|\bfestival\b|\bconference\b|\bexhibition\b/iu;
@@ -55,7 +55,7 @@ export function extractDateTokens(text:string):DateToken[] {
  return tokens.sort((a,b)=>a.start-b.start);
 }
 
-type Range = { start:DateToken; end:DateToken; kind:'application'|'event'|'other'|null };
+type Range = { start:DateToken; end:DateToken; kind:'application'|'event'|'other'|null; applicationPeriod:boolean };
 function localLabel(text:string):Range['kind'] {
  // Generic 'deadline' on a judging/event schedule is not an application cutoff.
  const explicitApplication=/applications?|registration|apply|접수|지원|신청|원서|서류|모집/iu.test(text);
@@ -72,9 +72,20 @@ function ranges(text:string,tokens:DateToken[]):Range[]{
   const gap=text.slice(a.end,b.start).trim();
   if(!/^(?:~|〜|～|-|–|—|to|through|부터|에서)$/iu.test(gap))continue;
   const prefix=text.slice(i?tokens[i-1].end:0,a.start).split(/[;\n]/).filter(s=>s.trim()).at(-1)??'';
-  found.push({start:a,end:b,kind:localLabel(prefix)});
+  found.push({start:a,end:b,kind:localLabel(prefix),applicationPeriod:applicationPeriod.test(prefix)});
  }
  return found;
+}
+
+function yearEvidence(candidate:Pick<DateCandidate,'sourceText'|'yearContextText'|'visibleYears'>,options:EvidenceOptions){
+ const context=candidate.yearContextText??'';
+ const contextValid=!!context&&(options.source==='image'||(options.slice??'').slice(0,15000).includes(context));
+ const reasons:string[]=[];
+ if(context&&!contextValid)reasons.push('invalid_year_evidence');
+ const contextYears=contextValid?fullYears(context):[];
+ for(const year of candidate.visibleYears??[])if(!contextValid||!contextYears.includes(year))reasons.push('invalid_year_evidence');
+ const relevantYears=[...new Set([...fullYears(candidate.sourceText),...contextYears])];
+ return {context,contextValid,contextYears,relevantYears,reasons};
 }
 
 /** Validates only supplied evidence. It never reads a clock, network, or neighboring source. */
@@ -91,12 +102,8 @@ export function validateDateEvidence(candidate:DateCandidate,options:EvidenceOpt
  const parts=value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
  if(!parts||!validYMD(+parts[1],+parts[2],+parts[3])||!Number.isFinite(Date.parse(value)))return reject('invalid_structured_date');
  const y=+parts[1],m=+parts[2],d=+parts[3];
- const context=candidate.yearContextText??'';
- const contextValid=!!context&&(options.source==='image'||(options.slice??'').slice(0,15000).includes(context));
- if(context&&!contextValid)base.reasons.push('invalid_year_evidence');
- const contextYears=contextValid?fullYears(context):[];
- for(const year of candidate.visibleYears??[])if(!contextValid||!contextYears.includes(year))base.reasons.push('invalid_year_evidence');
- const relevantYears=[...new Set([...fullYears(text),...contextYears])];
+ const {context,contextValid,contextYears,relevantYears,reasons:contextReasons}=yearEvidence(candidate,options);
+ base.reasons.push(...contextReasons);
  const dateRanges=ranges(text,tokens);
  type Match={token:DateToken;reading:Reading;source:YearSource;range?:Range};
  const matches:Match[]=[];const failures:string[]=[];
@@ -157,12 +164,96 @@ export function validateDateEvidence(candidate:DateCandidate,options:EvidenceOpt
  return {...base,accepted:true,normalizedValue,precision,yearResolution:match.source==='inferred'?'inferred_next_occurrence':'explicit',yearSource:match.source,weak,reasons:[...new Set(reasons)],matchedToken:match.token,kind};
 }
 
-export function normalizeDateCandidates(candidates:DateCandidate[],options:EvidenceOptions){
- const dates:ImportantDate[]=[];const decisions:DateDecision[]=[];
- for(const candidate of candidates){
-  const decision=validateDateEvidence(candidate,options);decisions.push(decision);if(!decision.accepted)continue;
-  // Copy the public fields explicitly: internal model evidence must never leak into saved results.
-  dates.push({label:candidate.label,kind:decision.kind,value:decision.normalizedValue,precision:decision.precision,timezone:candidate.timezone,yearResolution:decision.yearResolution,sourceUrl:candidate.sourceUrl,sourceText:candidate.sourceText});
+export type RangeEvidence=Pick<DateCandidate,'sourceText'|'sourceUrl'|'yearContextText'|'visibleYears'>;
+export type NormalizedApplicationRange={rangeType:'application';start:DateDecision;end:DateDecision;sourceText:string;sourceUrl:string};
+
+/** Parse evidence independently of candidate count/kinds/values. A same-quote validated
+ * candidate may anchor the century of a printed YY token only; it never supplies a missing year. */
+export function parseApplicationRanges(evidence:RangeEvidence,options:EvidenceOptions,validatedCenturyYears:readonly number[]=[]):NormalizedApplicationRange[]{
+ if(options.source==='url'&&!(options.slice??'').slice(0,15000).includes(evidence.sourceText))return [];
+ const context=yearEvidence(evidence,options);
+ if(context.context&&!context.contextValid||context.contextYears.length>1)return [];
+ const tokens=extractDateTokens(evidence.sourceText);const parsed=ranges(evidence.sourceText,tokens);
+ const result:NormalizedApplicationRange[]=[];
+ for(const range of parsed){
+  if(range.kind!=='application'||!range.applicationPeriod)continue;
+  // Chained/overlapping ranges and unresolved alternative numeric readings cannot create dates.
+  if(parsed.some(other=>other!==range&&(other.start===range.end||other.end===range.start)))continue;
+  const compatibleReadings=(token:DateToken)=>{
+   if(token.readings.length<=1||context.contextYears.length!==1)return token.readings;
+   // Only visible context, never a model-preferred value, can disambiguate these readings.
+   return token.readings.filter(reading=>reading.yearDigits&&yearMatches(reading,context.contextYears[0]));
+  };
+  const starts=compatibleReadings(range.start),ends=compatibleReadings(range.end);
+  if(starts.length!==1||ends.length!==1)continue;
+  const start=starts[0],end=ends[0];
+  const inlineYears=[start,end].filter(r=>r.yearDigits===4).map(r=>r.year!);
+  const anchors=[...new Set([...inlineYears,...context.contextYears])];
+  const resolve=(reading:Reading):number|null=>{
+   if(reading.yearDigits===4)return reading.year;
+   if(reading.yearDigits===2){
+    const centuries=[...new Set((anchors.length?anchors:validatedCenturyYears).map(y=>Math.floor(y/100)*100))];
+    return centuries.length===1?centuries[0]+reading.year!:null;
+   }
+   return context.contextValid&&context.contextYears.length===1&&context.relevantYears.length===1?context.contextYears[0]:null;
+  };
+  const startYear=resolve(start);if(startYear===null)continue;
+  let endYear=resolve(end);
+  if(!end.yearDigits&&start.yearDigits)endYear=startYear+(end.month*100+end.day<start.month*100+start.day?1:0);
+  if(endYear===null||!validYMD(startYear,start.month,start.day)||!validYMD(endYear,end.month,end.day))continue;
+  if(context.contextYears.length===1&&!context.contextYears.some(year=>year===startYear||year===endYear))continue;
+  const startValue=isoDate(startYear,start.month,start.day),endValue=isoDate(endYear,end.month,end.day);
+  if(Date.parse(endValue)<Date.parse(startValue))continue;
+  const endpoint=(value:string,kind:ImportantDate['kind'])=>validateDateEvidence({...evidence,label:kind==='deadline'?'Application deadline':'Applications open',kind,value,precision:'date_only',timezone:null,yearResolution:'explicit'}, {...options,allowInferred:false});
+  const a=endpoint(startValue,'application_open'),b=endpoint(endValue,'deadline');
+  if(!a.accepted||!b.accepted||a.kind!=='application_open'||b.kind!=='deadline')continue;
+  if(a.matchedToken?.start!==range.start.start||b.matchedToken?.start!==range.end.start)continue;
+  result.push({rangeType:'application',start:a,end:b,sourceText:evidence.sourceText,sourceUrl:evidence.sourceUrl});
  }
- return {dates,decisions,dropped:decisions.filter(d=>!d.accepted).length,weak:decisions.some(d=>d.weak),contextual:decisions.some(d=>d.accepted&&d.yearSource==='contextual_four_digit')};
+ return result;
+}
+
+const evidenceFingerprint=(text:string)=>text.normalize('NFKC').replace(/\s+/g,' ').trim();
+const evidenceKey=(date:RangeEvidence)=>JSON.stringify([date.sourceUrl,evidenceFingerprint(date.sourceText)]);
+function hasVisibleTimezone(text:string){
+ if(/\b(?:UTC|GMT|KST|JST|EST|EDT|CST|CDT|MST|MDT|PST|PDT|CET|CEST)\b|[+-]\d{2}:\d{2}/i.test(text))return true;
+ return [...text.matchAll(/\b[A-Za-z_]+\/[A-Za-z_]+\b/g)].some(match=>{try{new Intl.DateTimeFormat('en-US',{timeZone:match[0]});return true;}catch{return false;}});
+}
+function publicDate(candidate:DateCandidate,decision:DateDecision):ImportantDate {
+ return {label:candidate.label,kind:decision.kind,value:decision.normalizedValue,precision:decision.precision,timezone:candidate.timezone,yearResolution:decision.yearResolution,sourceUrl:candidate.sourceUrl,sourceText:candidate.sourceText};
+}
+
+export function normalizeDateCandidates(candidates:DateCandidate[],options:EvidenceOptions){
+ const candidateDecisions=candidates.map(candidate=>validateDateEvidence(candidate,options));
+ let entries=candidates.flatMap((candidate,i)=>candidateDecisions[i].accepted?[{date:publicDate(candidate,candidateDecisions[i]),decision:candidateDecisions[i]}]:[]);
+ const groups=new Map<string,DateCandidate[]>();
+ // Whitespace-equivalent quotes share a group, but retain an original verbatim quote. Sources never mix.
+ for(const candidate of candidates){const key=evidenceKey(candidate);groups.set(key,[...(groups.get(key)??[]),candidate]);}
+ const completedRanges:NormalizedApplicationRange[]=[];const repaired=new Set<string>();
+ for(const group of groups.values()){
+  const contexts=group.map(candidate=>yearEvidence(candidate,options));
+  const years=[...new Set(contexts.flatMap(c=>c.contextYears))];
+  if(years.length>1||contexts.some(c=>c.context&&!c.contextValid))continue;
+  const evidence=group.find(candidate=>yearEvidence(candidate,options).contextValid)??group[0];
+  const key=evidenceKey(evidence);
+  const anchors=entries.filter(e=>evidenceKey(e.date)===key&&e.decision.yearSource==='inline_two_digit'&&e.date.value).map(e=>Number(e.date.value!.slice(0,4)));
+  const ranges=parseApplicationRanges(evidence,options,anchors);
+  for(const range of ranges){
+   completedRanges.push(range);repaired.add(key);
+   for(const endpoint of [range.start,range.end]){
+    const label=endpoint.kind==='deadline'?'Application deadline':'Applications open';
+    const matching=entries.filter(e=>evidenceKey(e.date)===key&&(e.decision.matchedToken?.start===endpoint.matchedToken?.start||e.date.kind===endpoint.kind&&e.date.value?.slice(0,10)===endpoint.normalizedValue));
+    // Keep a validated timed candidate only when this quote visibly supplies a timezone.
+    const timed=matching.find(e=>e.date.precision==='date_time'&&hasVisibleTimezone(e.date.sourceText));
+    entries=entries.filter(e=>!matching.includes(e)&&!(evidenceKey(e.date)===key&&!e.date.value&&endpoint.tokens.length===2));
+    if(timed)entries.push({date:{...timed.date,label,kind:endpoint.kind},decision:{...timed.decision,kind:endpoint.kind}});
+    else entries.push({date:{label,kind:endpoint.kind,value:endpoint.normalizedValue,precision:'date_only',timezone:null,yearResolution:endpoint.yearResolution,sourceText:range.sourceText,sourceUrl:range.sourceUrl},decision:endpoint});
+   }
+  }
+ }
+ const unique=new Map<string,(typeof entries)[number]>();
+ for(const entry of entries){const key=JSON.stringify([entry.date.sourceUrl,entry.date.kind,entry.date.value,evidenceFingerprint(entry.date.sourceText)]);if(!unique.has(key))unique.set(key,entry);}
+ const final=[...unique.values()];const decisions=final.map(e=>e.decision);
+ const dropped=candidateDecisions.filter((d,i)=>!d.accepted&&!repaired.has(evidenceKey(candidates[i]))).length;
+ return {dates:final.map(e=>e.date),decisions,candidateDecisions,completedRanges,dropped,weak:decisions.some(d=>d.weak),contextual:decisions.some(d=>d.yearSource==='contextual_four_digit')};
 }
