@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { installationRoute } from "@/lib/http";
 import { investigateImage } from "@/lib/openai/extract-image";
 import { investigate } from "@/lib/agent/orchestrator";
@@ -22,7 +23,7 @@ async function runInvestigation(request:Request) {
     let input:unknown;try{input=await request.json();}catch{return Response.json({error:'Invalid URL'},{status:400});}
     const url=(input as {url?:unknown})?.url;
     if(typeof url!=='string'||url.length>8192)return Response.json({error:'Invalid URL'},{status:400});
-    run=emit=>investigate(url,emit,typeof (input as {goal?:unknown}).goal==='string'?(input as {goal:string}).goal.slice(0,1000):undefined);
+    run=emit=>investigate(url,emit,typeof (input as {goal?:unknown}).goal==='string'?(input as {goal:string}).goal.slice(0,1000):undefined,after);
   }
   let disconnected=false;
   const stream=new ReadableStream({

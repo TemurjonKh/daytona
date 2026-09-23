@@ -1,0 +1,18 @@
+import { beforeAll,afterAll,it,expect,vi } from 'vitest';
+import { database,installation,event,result } from './helpers';
+import { saveOpportunity } from '../lib/db/repository';
+const mocks=vi.hoisted(()=>({db:undefined as unknown,cookie:''}));
+vi.mock('../lib/db/client',async original=>({...await original<typeof import('../lib/db/client')>(),getDb:()=>mocks.db}));
+vi.mock('next/headers',()=>({cookies:async()=>({get:()=>({value:mocks.cookie})})}));
+import { GET,PATCH } from '../app/api/opportunities/[id]/route';
+import { GET as changes } from '../app/api/opportunities/[id]/changes/route';
+import { POST as check } from '../app/api/opportunities/[id]/check-now/route';
+import { POST as accept } from '../app/api/changes/[id]/accept/route';
+import { POST as dismiss } from '../app/api/changes/[id]/dismiss/route';
+import { GET as tick } from '../app/api/internal/tick/route';
+let d:Awaited<ReturnType<typeof database>>,id:string,changeId:string;
+beforeAll(async()=>{d=await database();mocks.db=d.db;const a=await installation(d.db);mocks.cookie=await installation(d.db);id=(await saveOpportunity(d.db,a,event(),result))!.id;const snap=(await d.db.query<{id:string}>("INSERT INTO source_snapshots(opportunity_id,fetch_method,text_slice,content_hash,extracted_result) VALUES($1,'plain fetch','text','hash',$2) RETURNING id",[id,JSON.stringify(result)])).rows[0].id;changeId=(await d.db.query<{id:string}>("INSERT INTO detected_changes(opportunity_id,new_snapshot_id,change_type,explanation,status,idempotency_key) VALUES($1,$2,'baseline_review','Review','pending_review','key') RETURNING id",[id,snap])).rows[0].id;});
+afterAll(async()=>{await d.pg.close();});
+it('every opportunity and review route returns 404 across installations',async()=>{for(const [route,target,method]of [[GET,id,'GET'],[PATCH,id,'PATCH'],[changes,id,'GET'],[check,id,'POST'],[accept,changeId,'POST'],[dismiss,changeId,'POST']] as const){const request=new Request('https://example.com/api',{method,headers:{origin:'https://example.com',host:'example.com','content-type':'application/json'},...(method==='PATCH'?{body:JSON.stringify({enabled:true,frequency:'daily'})}:{})});expect((await route(request,{params:Promise.resolve({id:target})})).status).toBe(404);}});
+it('tick authenticates without Origin and denies missing/wrong/unset secrets',async()=>{process.env.CRON_SECRET='test-secret';for(const value of ['', 'Bearer wrong'])expect((await tick(new Request('https://example.com/api/internal/tick',{headers:{authorization:value}}))).status).toBe(401);const response=await tick(new Request('https://example.com/api/internal/tick',{headers:{authorization:'Bearer test-secret'}}));expect(response.status).toBe(200);expect(Object.keys(await response.json()).sort()).toEqual(['changed','checksClaimed','failed','remindersFailed','remindersSent','unchanged']);delete process.env.CRON_SECRET;expect((await tick(new Request('https://example.com/api/internal/tick'))).status).toBe(401);});
+it('browser mutations require Origin even with a cookie',async()=>{expect((await check(new Request('https://example.com/api',{method:'POST',headers:{host:'example.com'}}),{params:Promise.resolve({id})})).status).toBe(403);});

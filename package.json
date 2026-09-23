@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "migrate": "node scripts/migrate.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "daytona:orphans": "node scripts/orphans.mjs"
   },
   "dependencies": {
     "@daytona/sdk": "^0.214.0",

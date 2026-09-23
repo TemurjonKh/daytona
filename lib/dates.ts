@@ -12,7 +12,7 @@ export function localDateTime(value: number) {
 }
 
 // Scope is derived from the date's own label/evidence, never from chronological order.
-const scopeWords = /maker|메이커|블록코딩|임베디드|category|track|division|부문|분야|대상별|예선|본선|early.bird|조기|작품\s*제출/iu;
+export const scopeWords = /maker|메이커|블록코딩|임베디드|category|track|division|부문|분야|대상별|예선|본선|early.bird|조기|작품\s*제출/iu;
 const registration = /application|registration|apply|접수|신청|지원|등록/iu;
 const period = /period|window|기간/iu;
 export function selectReminderTarget(result: OpportunityResult) {
@@ -30,8 +30,15 @@ export function selectReminderTarget(result: OpportunityResult) {
   // Do not silently switch to an event when an unresolved scoped deadline still exists.
   return {primary, primaryIsScoped: !!primary && !general, target: primary ?? (deadlines.length === 0 ? event : undefined)};
 }
-export function automaticReminders(target: ImportantDate) {
+export function automaticReminders(target: ImportantDate,timezone?:string) {
   if (!target.value) return [];
+  if(timezone){
+    const fields=(date:Date)=>Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(date).map(p=>[p.type,p.value]));
+    const localStamp=(date:Date)=>{const p=fields(date);return Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second);};
+    const local=target.precision==='date_only'?Date.parse(target.value.slice(0,10)+'T09:00:00Z'):localStamp(new Date(target.value));
+    if(!Number.isFinite(local))return [];
+    return [3,1].map(days=>{const desired=local-days*86400000;let instant=desired;for(let n=0;n<4;n++)instant+=desired-localStamp(new Date(instant));return {days,at:new Date(instant).toISOString()};});
+  }
   let base:Date;
   if(target.precision === "date_only") {
     const [year,month,day]=target.value.slice(0,10).split("-").map(Number);
