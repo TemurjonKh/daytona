@@ -7,7 +7,8 @@ export function normalizeSourceUrl(value:string) {
 }
 export function opportunityIdentity(event:Pick<SavedEvent,"sourceUrl"|"title"|"dueAt">) {
   if (/^https?:/i.test(event.sourceUrl)) return normalizeSourceUrl(event.sourceUrl);
-  if (/^urn:poster:sha256:[a-f0-9]{64}$/i.test(event.sourceUrl)) return event.sourceUrl;
+  if (/^urn:poster:sha256:[a-f0-9]{64}(:region:[1-9]\d*)?$/i.test(event.sourceUrl)) return event.sourceUrl;
+  if (/^urn:poster:sha256:/i.test(event.sourceUrl)) throw new Error("Invalid poster source identifier");
   // Legacy posters had random IDs and no image bytes available to recover a hash.
   return "poster:"+event.title.trim().toLocaleLowerCase().replace(/\s+/g," ")+":"+(event.dueAt??"");
 }

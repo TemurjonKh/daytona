@@ -29,7 +29,7 @@ export async function investigateImage(bytes:Buffer,mime:string,emit:Emit,goal?:
   console.info('Poster pipeline metrics',JSON.stringify(pipeline.diagnostics));
   emit('stage',{stage:'reading_poster',status:'completed',message:pipeline.diagnostics.transcriptionTruncated?'Poster transcription was incomplete; recovered evidence needs review':'Visible text transcribed from overlapping views'});
   emit('stage',{stage:'verifying_dates',status:'completed',message:`${pipeline.dateEvidence.length} date-bearing lines retained for review`});
-  emit('result',pipeline.result);emit('stage',{stage:'completed',status:'completed'});emit('done',{ok:true});
+  if(pipeline.kind==='multiple')emit('results',pipeline.results);else emit('result',pipeline.result);emit('stage',{stage:'completed',status:'completed'});emit('done',{ok:true});
  }catch(error){
   const e=error as {name?:string;status?:number;code?:string};
   const message=e.name?.includes('Timeout')||e.name?.includes('Abort')?'Poster extraction timed out':'Poster extraction failed';

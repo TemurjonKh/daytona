@@ -37,6 +37,15 @@ export function readTranscription(content: string | null, finishReason: string |
   return { transcript: { views: valid }, truncated, reasons: truncated ? ['transcription_truncated'] : [] };
 }
 
+export function orderedPosterRegionIds(transcript: Transcription, views: ViewGeometry[]): string[] {
+  const contextIds = new Set(views.filter(v => v.kind === 'context').map(v => v.viewId));
+  const validIds = new Set(views.map(v => v.viewId));
+  const records = transcript.views.filter(r => validIds.has(r.viewId));
+  // ponytail: Region numbering follows model-reported context reading order, then
+  // first tile appearance. There are no measured region coordinates in this schema.
+  return [...new Set([...records.filter(r => contextIds.has(r.viewId)), ...records.filter(r => !contextIds.has(r.viewId))].map(r => r.posterRegionId))];
+}
+
 /** Context order is authoritative. Insert tile-only observations using same-view
  * anchors, then source rectangle and within-view reading position as a fallback. */
 export function deduplicateTranscription(transcript: Transcription, views: ViewGeometry[]): DeduplicatedLine[] {
@@ -58,7 +67,7 @@ export function deduplicateTranscription(transcript: Transcription, views: ViewG
     else groups.push({ longest: observation, members: [observation] });
   }
   const result: DeduplicatedLine[] = [];
-  for (const region of new Set(observations.map(o => o.region))) {
+  for (const region of orderedPosterRegionIds(transcript, views)) {
     const subset = groups.filter(g => g.longest.region === region);
     const contextGroups = subset.filter(g => g.members.some(m => m.view.kind === 'context')).sort((a, b) =>
       Math.min(...a.members.filter(m => m.view.kind === 'context').map(m => m.lineIndex)) - Math.min(...b.members.filter(m => m.view.kind === 'context').map(m => m.lineIndex)));

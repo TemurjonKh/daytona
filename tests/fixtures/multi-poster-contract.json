@@ -1,0 +1,18 @@
+{
+  "provenance": "Synthetic offline contract fixture. No recorded Vieworks + Doosan model response was supplied; these example dates are not claims about that image.",
+  "transcription": {
+    "views": [
+      {"viewId":"tile-1","posterRegionId":"a-label","lines":["Second opportunity", "Application period 2028.10.01 ~ 2028.10.15"]},
+      {"viewId":"context","posterRegionId":"z-label","lines":["First opportunity", "Application period 2028.09.01 ~ 2028.09.15"]},
+      {"viewId":"context","posterRegionId":"a-label","lines":["Second opportunity", "Application period 2028.10.01 ~ 2028.10.15"]},
+      {"viewId":"tile-2","posterRegionId":"z-label","lines":["First opportunity", "Application period 2028.09.01 ~ 2028.09.15"]}
+    ]
+  },
+  "classification": {
+    "regions": [
+      {"posterRegionId":"a-label","title":"Second opportunity","organization":null,"opportunityType":"job","summary":"Second poster opportunity.","eligibility":[],"requirements":[],"suggestedTasks":[],"applicationUrl":null},
+      {"posterRegionId":"z-label","title":"First opportunity","organization":null,"opportunityType":"job","summary":"First poster opportunity.","eligibility":[],"requirements":[],"suggestedTasks":[],"applicationUrl":null}
+    ],
+    "mappings": []
+  }
+}

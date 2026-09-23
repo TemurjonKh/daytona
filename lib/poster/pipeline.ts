@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { zodResponseFormat } from 'openai/helpers/zod';
 import type OpenAI from 'openai';
 import { preparePosterViews } from './preprocess';
-import { readTranscription, deduplicateTranscription, TranscriptionSchema } from './transcription';
+import { readTranscription, deduplicateTranscription, orderedPosterRegionIds, TranscriptionSchema } from './transcription';
 import { discoverDateEvidence } from '@/lib/dates/evidence';
 import { ClassificationSchema, mergePosterEvidence } from './classification';
 import { transcribeInstructions, classifyInstructions } from './prompts';
@@ -57,7 +57,7 @@ export async function runPosterPipeline(bytes:Buffer,sourceId:string,client:Post
  const parsed=ClassificationSchema.safeParse(classification);
  const normalizationStart=performance.now();
  const merged=mergePosterEvidence(lines,dateEvidence,parsed.success?parsed.data:{regions:[],mappings:[]},sourceId,{
-  truncated:transcription.truncated,resolutionInsufficient:prepared.resolutionInsufficient,
+  truncated:transcription.truncated,resolutionInsufficient:prepared.resolutionInsufficient,regionOrder:orderedPosterRegionIds(transcription.transcript,prepared.views),
   classificationIncomplete:!parsed.success||classified?.choices[0]?.finish_reason!=='stop',
  });
  const diagnostics={model,upload:upload??null,prepared:{width:prepared.width,height:prepared.height,bytes:bytes.length},views:viewMetadata,

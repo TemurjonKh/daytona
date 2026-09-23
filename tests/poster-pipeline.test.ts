@@ -16,7 +16,9 @@ const transcript=(lines:string[],tileLines=lines):Transcription=>({views:[{viewI
 const summary=(posterRegionId='poster-1')=>({posterRegionId,title:'Example opportunity',organization:null,opportunityType:'job' as const,summary:'A public opportunity.',eligibility:[],requirements:[],suggestedTasks:[],applicationUrl:null});
 const extract=(raw:Transcription,classification:Classification={regions:[summary()],mappings:[]},options={truncated:false,resolutionInsufficient:false})=>{
  const lines=deduplicateTranscription(raw,views);const evidence=discoverDateEvidence(lines);
- return {...mergePosterEvidence(lines,evidence,classification,'urn:poster:test',options),lines,evidence};
+ const output=mergePosterEvidence(lines,evidence,classification,'urn:poster:test',options);
+ if(output.kind!=='single')throw new Error('Single-poster fixture expected');
+ return {...output,lines,evidence};
 };
 const values=(result:ReturnType<typeof extract>)=>result.result.importantDates.map(d=>[d.kind,d.value]);
 
@@ -82,8 +84,10 @@ describe('transcription completeness and deduplication',()=>{
  });
  it('does not merge separate poster regions or lend a year',()=>{
   const raw=transcript(['2026 recruitment','Deadline 09.27']);raw.views.push({viewId:'context',posterRegionId:'poster-2',lines:['Deadline 09.27']});
-  const result=extract(raw);expect(result.regionResults).toHaveLength(2);expect(result.regionResults[0].importantDates[0].value).toBe('2026-09-27');expect(result.regionResults[1].importantDates[0].value).toBeNull();
-  expect(new Set(result.result.importantDates.map(d=>d.sourceUrl)).size).toBe(2);
+  const lines=deduplicateTranscription(raw,views);const result=mergePosterEvidence(lines,discoverDateEvidence(lines),{regions:[summary()],mappings:[]},'urn:poster:test',{truncated:false,resolutionInsufficient:false});
+  expect(result.kind).toBe('multiple');if(result.kind!=='multiple')throw new Error('Expected multiple');
+  expect(result.results).toHaveLength(2);expect(result.results[0].importantDates[0].value).toBe('2026-09-27');expect(result.results[1].importantDates[0].value).toBeNull();
+  expect(new Set(result.results.flatMap(r=>r.importantDates.map(d=>d.sourceUrl))).size).toBe(2);
  });
  it('preserves conflicting numeric observations instead of corroborating them',()=>{
   const result=extract(transcript(['Deadline 2026-09-27'],['Deadline 2026-09-28']));
@@ -154,6 +158,7 @@ describe('exactly two model calls and browser upload',()=>{
   const output=await runPosterPipeline(bytes,'urn:poster:test',{chat:{completions:{create}}} as unknown as PosterClient,'gpt-4.1-mini');
   expect(create).toHaveBeenCalledTimes(2);expect(create.mock.calls[0][0].max_completion_tokens).toBe(TRANSCRIBE_OUTPUT_TOKENS);
   expect(create.mock.calls[1][0].messages[1].content.filter((p:{type:string})=>p.type==='image_url')).toHaveLength(1);
+  if(output.kind!=='single')throw new Error('Expected single');
   expect(output.result.importantDates.map(d=>d.value)).toEqual(['2026-09-08','2026-09-15']);
   expect(JSON.stringify(output.diagnostics)).not.toContain('base64');expect(output.diagnostics.transcription.estimatedUsd).toBeCloseTo(0.00024);
  });

@@ -41,3 +41,19 @@ it('both structured-output transport schemas require nullable context and valida
  for(const simplified of [false,true]){const parsed=extractionSchema(simplified).parse(fixture.draft);expect(parsed.importantDates[0].visibleYears).toEqual([2026]);expect(parsed.importantDates[0].yearContextText).toBe(fixture.sourceEvidence.yearContextText);}
  const missing=structuredClone(fixture.draft) as unknown as {importantDates:Record<string,unknown>[]};delete missing.importantDates[0].yearContextText;expect(ExtractionDraft.safeParse(missing).success).toBe(false);
 });
+
+it('emits a bare results array for a multi-poster image',async()=>{
+ process.env.OPENAI_MODEL='gpt-4.1-mini';
+ const bytes=await sharp({create:{width:600,height:800,channels:3,background:'white'}}).png().toBuffer();
+ api.create.mockResolvedValueOnce({choices:[{finish_reason:'stop',message:{content:JSON.stringify({views:[
+  {viewId:'context',posterRegionId:'b',lines:['Deadline 2028-09-15']},
+  {viewId:'context',posterRegionId:'a',lines:['Deadline 2028-10-15']},
+ ]})}}]}).mockResolvedValueOnce({choices:[{finish_reason:'stop',message:{content:JSON.stringify({regions:[],mappings:[]})}}]});
+ const events:{event:string;data:unknown}[]=[];await investigateImage(bytes,'image/png',(event,data)=>events.push({event,data}));
+ expect(events.some(e=>e.event==='result')).toBe(false);
+ const multiple=events.find(e=>e.event==='results')!.data as OpportunityResult[];
+ expect(Array.isArray(multiple)).toBe(true);expect(multiple).toHaveLength(2);
+ expect(multiple.map(r=>r.importantDates[0].value)).toEqual(['2028-09-15','2028-10-15']);
+ expect(multiple.map(r=>r.sources[0].url.split(':region:')[1])).toEqual(['1','2']);
+ expect(events.at(-1)).toEqual({event:'done',data:{ok:true}});
+});

@@ -9,6 +9,9 @@ export const ClassificationSchema = z.object({
  mappings:z.array(z.object({ evidenceId:z.string(), candidateId:z.string().nullable(), posterRegionId:z.string(), kind:ImportantDateKind, label:z.string() })),
 });
 export type Classification = z.infer<typeof ClassificationSchema>;
+export type PosterPipelineOutput =
+ | { kind:'single'; result:OpportunityResult }
+ | { kind:'multiple'; results:OpportunityResult[] };
 const englishLabel:Record<ImportantDate['kind'],string> = { application_open:'Applications open', deadline:'Application deadline', event_start:'Event date', event_end:'Event ends', announcement:'Announcement', rolling:'Open applications', other:'Date — review its meaning' };
 export const posterReviewCopy = {
  noDate:'No visible date was detected in the poster transcription. Review the original image.',
@@ -18,13 +21,21 @@ export const posterReviewCopy = {
  event:'An event date was found. No application deadline was identified.',
 };
 const isEnglish = (text:string) => !/[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text);
-export function mergePosterEvidence(lines:DeduplicatedLine[], evidence:DiscoveredDateEvidence[], classification:Classification, sourceId:string, options:{truncated:boolean;resolutionInsufficient:boolean;classificationIncomplete?:boolean}) {
+export function mergePosterEvidence(lines:DeduplicatedLine[], evidence:DiscoveredDateEvidence[], classification:Classification, sourceId:string, options:{truncated:boolean;resolutionInsufficient:boolean;classificationIncomplete?:boolean;regionOrder?:string[]}):PosterPipelineOutput & {reasons:string[]} {
  const reasons=new Set<string>();
  if(options.truncated)reasons.add('transcription_truncated');
  if(options.resolutionInsufficient||!lines.length)reasons.add('image_resolution_insufficient');
  if(options.classificationIncomplete)reasons.add('classification_mapping_missing');
  if(!evidence.length)reasons.add('no_date_text_detected');
- const regions=[...new Set(lines.map(l=>l.posterRegionId))];
+ const crossedEvidence=new Set<string>();
+ // The transcription line is the owner of evidence, not a classification association.
+ evidence=evidence.map(item=>{
+  const owner=lines.find(line=>line.id===item.lineId);
+  if(!owner||owner.originalText!==item.originalText)throw new Error('Poster evidence has no matching transcription line');
+  if(owner.posterRegionId!==item.posterRegionId)crossedEvidence.add(item.id);
+  return {...item,posterRegionId:owner.posterRegionId};
+ });
+ const regions=[...new Set([...(options.regionOrder??[]),...lines.map(l=>l.posterRegionId)])];
  if(!regions.length)regions.push('unreadable');
  const results:OpportunityResult[]=[];
  for(const [regionIndex,region] of regions.entries()){
@@ -60,8 +71,11 @@ export function mergePosterEvidence(lines:DeduplicatedLine[], evidence:Discovere
      kind=['deadline','application_open','rolling'].includes(mapping.kind)?'other':mapping.kind;
      if(mapping.kind==='announcement')kind='other';
     }
-    if(mappings.length>1||conflicting.has(item.id))kind='other';
+    const crossRegion=crossedEvidence.has(item.id)||classification.mappings.some(m=>m.evidenceId===item.id&&m.candidateId===candidate.id&&m.posterRegionId!==region);
+    if(crossRegion){reasons.add('different_poster_region');weak=true;}
+    if(mappings.length>1||conflicting.has(item.id)||crossRegion)kind='other';
     let label=mapping&&mapping.kind===kind&&isEnglish(mapping.label)&&mapping.label.trim()?mapping.label:englishLabel[kind];
+    if(crossRegion)label='Date — poster association needs review';
     if(!candidate.value&&kind!=='rolling')label+=' (date needs review)';
     importantDates.push({label,kind,value:candidate.value,precision:candidate.value?(candidate.precision??'date_only'):'unknown',timezone:candidate.timezone??null,
      yearResolution:candidate.value?'explicit':'unknown',sourceText:item.originalText,sourceUrl});
@@ -80,6 +94,10 @@ export function mergePosterEvidence(lines:DeduplicatedLine[], evidence:Discovere
   const review=options.truncated||options.resolutionInsufficient||!lines.length?posterReviewCopy.unreadable:conflicting.size?posterReviewCopy.conflict:uncertain?posterReviewCopy.uncertain:!dates.length?posterReviewCopy.noDate:unique.some(d=>d.kind==='event_start')&&!unique.some(d=>d.kind==='deadline')?posterReviewCopy.event:'';
   const generatedSummary=summary&&isEnglish(summary.summary)?summary.summary:'';
   const validUrl=summary?.applicationUrl&&/^https?:\/\//.test(summary.applicationUrl)&&regionLines.some(l=>l.originalText.includes(summary.applicationUrl!))?summary.applicationUrl:null;
+  // Assert region ownership immediately before producing the public result.
+  for(const date of unique){
+   if(date.sourceUrl!==sourceUrl||!dates.some(item=>item.originalText===date.sourceText&&regionLines.some(line=>line.id===item.lineId)))throw new Error('Cross-region poster evidence');
+  }
   results.push(OpportunityResult.parse({title:summary?.title||`Uploaded poster${regions.length>1?' '+(regionIndex+1):''}`,organization:summary?.organization??null,opportunityType:summary?.opportunityType??'other',
    summary:[generatedSummary,review].filter(Boolean).join(' '),importantDates:unique,
    eligibility:summary?.eligibility.filter(isEnglish)??[],requirements:summary?.requirements.filter(isEnglish)??[],suggestedTasks:summary?.suggestedTasks.filter(isEnglish)??[],
@@ -87,13 +105,5 @@ export function mergePosterEvidence(lines:DeduplicatedLine[], evidence:Discovere
    conflicts,confidence:weak||!dates.length?'low':'medium'}));
  }
  if(classification.mappings.some(m=>!regions.includes(m.posterRegionId)))reasons.add('different_poster_region');
- const result=results.length===1?results[0]:OpportunityResult.parse({
-  title:'Multiple posters — review each separately',organization:null,opportunityType:'other',
-  summary:results.map((r,i)=>`Poster ${i+1}: ${r.summary}`).join('\n\n'),
-  importantDates:results.flatMap((r,i)=>r.importantDates.map(d=>({...d,label:`Poster ${i+1}: ${d.label}`}))),
-  eligibility:results.flatMap((r,i)=>r.eligibility.map(s=>`Poster ${i+1}: ${s}`)),requirements:results.flatMap((r,i)=>r.requirements.map(s=>`Poster ${i+1}: ${s}`)),
-  suggestedTasks:results.flatMap((r,i)=>r.suggestedTasks.map(s=>`Poster ${i+1}: ${s}`)),applicationUrl:null,sources:results.flatMap(r=>r.sources),
-  conflicts:[...results.flatMap(r=>r.conflicts),{field:'Separate posters',explanation:'This image contains multiple posters. Dates and evidence are separated by poster; upload one poster to select a reminder.',sourceUrls:results.flatMap(r=>r.sources.map(s=>s.url))}],confidence:'low',
- });
- return {result,regionResults:results,reasons:[...reasons]};
+ return results.length===1?{kind:'single',result:results[0],reasons:[...reasons]}:{kind:'multiple',results,reasons:[...reasons]};
 }
